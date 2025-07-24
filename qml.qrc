@@ -1,0 +1,20 @@
+<RCC>
+    <qresource prefix="/qml">
+        <file>qml/Main.qml</file>
+        <file>qml/HeaderBar.qml</file>
+        <file>qml/StatusView.qml</file>
+        <file>qml/PeerListView.qml</file>
+        <file>qml/SidebarButton.qml</file>
+        <file>qml/Home.qml</file>
+        <file>qml/Peers.qml</file>
+        <file>qml/Transaction.qml</file>
+        <file>qml/Chain.qml</file>
+        <file>qml/Header.qml</file>
+        <file>qml/Block.qml</file>
+        <file>qml/Kernel.qml</file>
+        <file>qml/Output.qml</file>
+        <file>qml/Pool.qml</file>
+        <file>qml/PeerMarker.qml</file>
+    </qresource>
+    <qresource prefix="/"/>
+</RCC>
