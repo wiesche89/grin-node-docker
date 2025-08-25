@@ -37,6 +37,8 @@
 #include "output.h"
 #include "geolookup.h"
 
+#include "config/config.h"
+
 /**
  * @brief registerAllMetaTypes
  */
@@ -105,9 +107,9 @@ int main(int argc, char *argv[])
         foreignUrl = "http://192.168.178.72:13413/v2/foreign";
         foreignAuth = "Basic Z3JpbjpkN2lxbXBDa1NLWWpzY1RDZU9rcw==";
     } else {
-        ownerUrl = "https://grincoin.org/v2/owner";
+        ownerUrl = "https://testnet.grincoin.org/v2/owner";
         ownerAuth = QString();
-        foreignUrl = "https://grincoin.org/v2/foreign";
+        foreignUrl = "https://testnet.grincoin.org/v2/foreign";
         foreignAuth = QString();
     }
 
@@ -122,6 +124,10 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty("nodeForeignApi", nodeForeignApi);
     engine.rootContext()->setContextProperty("nodeOwnerApi", nodeOwnerApi);
 
+    Config *config = new Config();
+    config->load("C:/Users/Wiesche/.grin/test/grin-server.toml");
+    engine.rootContext()->setContextProperty("config", config);
+
     engine.load(QUrl(QStringLiteral("qrc:/qml/qml/Main.qml")));
     if (engine.rootObjects().isEmpty()) {
         return -1;
@@ -129,6 +135,8 @@ int main(int argc, char *argv[])
 
     nodeOwnerApi->startStatusPolling(10000);
     nodeOwnerApi->startConnectedPeersPolling(5000);
+
+
 
     return app.exec();
 }

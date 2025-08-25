@@ -83,6 +83,10 @@ ApplicationWindow {
                     text: "Pool"
                     onClicked: root.currentIndex = 8
                 }
+                SidebarButton {
+                    text: "Settings"
+                    onClicked: root.currentIndex = 9
+                }
             }
         }
 
@@ -109,6 +113,7 @@ ApplicationWindow {
                 Kernel      { Layout.fillWidth: true; Layout.fillHeight: true }
                 Output      { Layout.fillWidth: true; Layout.fillHeight: true }
                 Pool        { Layout.fillWidth: true; Layout.fillHeight: true }
+                Settings    { Layout.fillWidth: true; Layout.fillHeight: true }
             }
         }
 

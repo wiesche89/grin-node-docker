@@ -7,6 +7,7 @@ INCLUDEPATH += \
     src/geo
 
 SOURCES += \
+    src/config/config.cpp \
     src/main.cpp \
     src/geo/geolookup.cpp
 
@@ -15,6 +16,7 @@ wasm {
 }
 
 HEADERS += \
+    src/config/config.h \
     src/geo/geolookup.h
 
 
