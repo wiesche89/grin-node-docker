@@ -1,35 +1,72 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
+#include <QObject>
 #include <QString>
-#include <QVariant>
-#include <QMap>
-#include <QVector>
 
-struct ConfigLine {
-    enum Type { Comment, Section, KeyValue, Empty } type;
-    QString section;
-    QString key;
-    QString value;
-    QString raw;
-};
-
-class Config : public QObject {
+class Config : public QObject
+{
     Q_OBJECT
+    Q_PROPERTY(QString path READ path WRITE setPath NOTIFY pathChanged)
+    Q_PROPERTY(QString text READ text WRITE setText NOTIFY textChanged)
+    Q_PROPERTY(QString errorString READ errorString NOTIFY errorStringChanged)
 public:
-    explicit Config(QObject *parent = nullptr);
+    explicit Config(QObject *parent = nullptr) : QObject(parent)
+    {
+    }
 
-    Q_INVOKABLE bool load(const QString &path);
-    Q_INVOKABLE bool save(const QString &path) const;
+    QString path() const
+    {
+        return m_path;
+    }
 
-    Q_INVOKABLE QVariant getValue(const QString &section, const QString &key) const;
-    Q_INVOKABLE void setValue(const QString &section, const QString &key, const QVariant &value);
+    void setPath(const QString &p)
+    {
+        if (m_path == p) {
+            return;
+        }
+        m_path = p;
+        emit pathChanged();
+    }
 
-    Q_INVOKABLE QVariantList allEntries() const;
+    QString text() const
+    {
+        return m_text;
+    }
+
+    void setText(const QString &t)
+    {
+        if (m_text == t) {
+            return;
+        }
+        m_text = t;
+        emit textChanged();
+    }
+
+    QString errorString() const
+    {
+        return m_error;
+    }
+
+    Q_INVOKABLE bool load();                   // lädt Datei -> text
+    Q_INVOKABLE bool save();                   // speichert text -> Datei
+    Q_INVOKABLE bool loadFromNetwork(const QString &network); // ~/.grin/<network>/grin-server.toml
+
+signals:
+    void pathChanged();
+    void textChanged();
+    void errorStringChanged();
 
 private:
-    QVector<ConfigLine> lines;
-};
+    QString m_path;
+    QString m_text;
+    QString m_error;
 
+    void setError(const QString &e)
+    {
+        m_error = e;
+        emit errorStringChanged();
+    }
+};
 
 #endif // CONFIG_H
