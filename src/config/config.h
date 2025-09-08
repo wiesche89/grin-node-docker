@@ -3,6 +3,11 @@
 
 #include <QObject>
 #include <QString>
+#include <QRegularExpression>
+#include <QRegularExpressionMatch>
+#include <QDir>
+#include <QFile>
+#include <QTextStream>
 
 class Config : public QObject
 {
@@ -51,7 +56,7 @@ public:
     Q_INVOKABLE bool load();                   // lädt Datei -> text
     Q_INVOKABLE bool save();                   // speichert text -> Datei
     Q_INVOKABLE bool loadFromNetwork(const QString &network); // ~/.grin/<network>/grin-server.toml
-
+    Q_INVOKABLE QVariant value(const QString &key, const QVariant &defaultValue) const;
 signals:
     void pathChanged();
     void textChanged();
@@ -67,6 +72,15 @@ private:
         m_error = e;
         emit errorStringChanged();
     }
+
+    static QVariant coerceToType(const QString &raw, const QVariant &defaultValue);
+    static QHash<QString, QString> parseTomlFlatKeys(const QString &text);
+    static QString unescapeTomlString(QString s);
+    static int findEqualOutsideQuotes(const QString &line);
+    static QString stripTomlComment(const QString &line);
+    static QString trimOutside(const QString &s);
+    static bool isQuoted(const QString &v);
+    static QString dequote(QString v);
 };
 
 #endif // CONFIG_H

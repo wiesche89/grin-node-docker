@@ -27,3 +27,13 @@ emsdk_env```
 https://thinkinginqt.com/doc/qtcreator/creator-setup-webassembly.html
 (Important: Qt Creator must be restarted after EMSDK has been installed.)
 
+
+### 5 Docker
+Build docker image
+```docker build -t grin-wasm .```
+
+Start docker container
+```docker run --rm -p 8081:80 -p 13413:13413 -p 13414:13414 --name grin-wasm grin-wasm```
+
+Testing
+```docker exec -it grin-wasm sh -lc "T=\`cat \$GRIN_HOME/test/.api_secret 2>/dev/null || echo ''\`; echo '{\"jsonrpc\":\"2.0\",\"method\":\"get_status\",\"params\":[],\"id\":1}' | curl -i -u grin:\$T -H 'Content-Type: application/json' --data @- http://127.0.0.1:13413/v2/owner || true"```

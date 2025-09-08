@@ -9,7 +9,7 @@ INCLUDEPATH += \
 
 SOURCES += \
     src/config/config.cpp \
-    src/grinnodemanager/grinnodemanager.cpp \
+    #src/grinnodemanager/grinnodemanager.cpp \
     src/main.cpp \
     src/geo/geolookup.cpp
 
@@ -19,8 +19,9 @@ wasm {
 
 HEADERS += \
     src/config/config.h \
-    src/geo/geolookup.h \
-    src/grinnodemanager/grinnodemanager.h
+    #src/grinnodemanager/grinnodemanager.h \
+    src/geo/geolookup.h
+
 
 
 RESOURCES += \

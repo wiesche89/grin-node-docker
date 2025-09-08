@@ -5,7 +5,7 @@
 #include <QFile>
 #include <QDir>
 
-#include "grinnodemanager/grinnodemanager.h"
+// #include "grinnodemanager/grinnodemanager.h"
 
 #include "nodeforeignapi.h"
 #include "nodeownerapi.h"
@@ -110,7 +110,6 @@ int main(int argc, char *argv[])
     // -----------------------------------------------------------------------------------------------------------------------
     // Variables
     // -----------------------------------------------------------------------------------------------------------------------
-    bool local = true;
     QString ownerUrl;
     QString ownerAuth;
     QString foreignUrl;
@@ -134,38 +133,30 @@ int main(int argc, char *argv[])
     // -----------------------------------------------------------------------------------------------------------------------
     // Instance NodeManager
     // -----------------------------------------------------------------------------------------------------------------------
-    GrinNodeManager manager;
-    if (!manager.startNode(network)) {
-        return -10;
-    }
+    // GrinNodeManager manager;
+    // if (!manager.startNode(network)) {
+    // return -10;
+    // }
 
     // -----------------------------------------------------------------------------------------------------------------------
     // API configuration
     // -----------------------------------------------------------------------------------------------------------------------
-    if (local) {
-        ownerUrl = "http://127.0.0.1:13413/v2/owner";
-        foreignUrl = "http://127.0.0.1:13413/v2/foreign";
+    ownerUrl = "http://127.0.0.1:13413/v2/owner";
+    foreignUrl = "http://127.0.0.1:13413/v2/foreign";
 
-        // Username & Passwort
-        QString username = "grin";
-        QString passwordOwner;
-        QString passwordForeign;
+    // Username & Passwort
+    QString username = "grin";
+    QString passwordOwner;
+    QString passwordForeign;
 
-        passwordOwner = readFileToString(QString(QDir::homePath() + "/.grin/%1/.api_secret").arg(network));
-        passwordForeign = readFileToString(QString(QDir::homePath() + "/.grin/%1/.foreign_api_secret").arg(network));
+    passwordOwner = readFileToString(QString(QDir::homePath() + "/.grin/%1/.api_secret").arg(network));
+    passwordForeign = readFileToString(QString(QDir::homePath() + "/.grin/%1/.foreign_api_secret").arg(network));
 
-        QString concatenatedOwner = username + ":" + passwordOwner;
-        ownerAuth = "Basic " + concatenatedOwner.toUtf8().toBase64();
+    QString concatenatedOwner = username + ":" + passwordOwner;
+    ownerAuth = "Basic " + concatenatedOwner.toUtf8().toBase64();
 
-        QString concatenatedForeign = username + ":" + passwordForeign;
-        foreignAuth = "Basic " + concatenatedForeign.toUtf8().toBase64();
-
-        ownerAuth = "Basic Z3JpbjowOUxKRGNwSUlHSFpVNVgxd3ZuYQ==";
-        foreignAuth = "Basic Z3JpbjpvZFdtTnRiV3dOWUJ4VkJLV2hLcQ==";
-    } else {
-        ownerUrl = "https://testnet.grincoin.org/v2/owner";
-        foreignUrl = "https://testnet.grincoin.org/v2/foreign";
-    }
+    QString concatenatedForeign = username + ":" + passwordForeign;
+    foreignAuth = "Basic " + concatenatedForeign.toUtf8().toBase64();
 
     // Node Owner Api Instance
     NodeOwnerApi *nodeOwnerApi = new NodeOwnerApi(ownerUrl, ownerAuth);
@@ -183,6 +174,10 @@ int main(int argc, char *argv[])
 
     Config config;
     config.loadFromNetwork(network);     // lädt ~/.grin/main/grin-server.toml
+
+    QString dbroot = config.value("server.db_root", "/default/path").toString();
+    qDebug() << "db_root =" << dbroot;
+
     engine.rootContext()->setContextProperty("config", &config);
 
     engine.load(QUrl(QStringLiteral("qrc:/qml/qml/Main.qml")));
