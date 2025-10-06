@@ -55,7 +55,7 @@ public:
 
     Q_INVOKABLE bool load();                   // lädt Datei -> text
     Q_INVOKABLE bool save();                   // speichert text -> Datei
-    Q_INVOKABLE bool loadFromNetwork(const QString &network); // ~/.grin/<network>/grin-server.toml
+    Q_INVOKABLE bool loadFromNetwork(const QString &network, bool local = false); // ~/.grin/<network>/grin-server.toml
     Q_INVOKABLE QVariant value(const QString &key, const QVariant &defaultValue) const;
 signals:
     void pathChanged();
