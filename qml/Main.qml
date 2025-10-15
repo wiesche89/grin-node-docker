@@ -7,13 +7,13 @@ ApplicationWindow {
     visible: true
     width: 1700
     height: 1024
-    title: "GrinMesh"
+    title: "GrinNode"
     color: "#1e1e1e"
 
     // 🔹 Hintergrundbild immer sichtbar
     Image {
         anchors.fill: parent
-        source: "qrc:/res/media/image3.jpg"
+        source: "qrc:/res/media/grin-node/image_10.jpg"
         //opacity: 0.3
 
         // Glanz darüberlegen
@@ -52,40 +52,20 @@ ApplicationWindow {
                     onClicked: root.currentIndex = 0
                 }
                 SidebarButton {
-                    text: "Peers"
+                    text: "Map"
                     onClicked: root.currentIndex = 1
                 }
                 SidebarButton {
-                    text: "Transaction"
+                    text: "Peers"
                     onClicked: root.currentIndex = 2
                 }
                 SidebarButton {
-                    text: "Chain"
+                    text: "Transaction"
                     onClicked: root.currentIndex = 3
                 }
                 SidebarButton {
-                    text: "Header"
+                    text: "Chain"
                     onClicked: root.currentIndex = 4
-                }
-                SidebarButton {
-                    text: "Block"
-                    onClicked: root.currentIndex = 5
-                }
-                SidebarButton {
-                    text: "Kernel"
-                    onClicked: root.currentIndex = 6
-                }
-                SidebarButton {
-                    text: "Output"
-                    onClicked: root.currentIndex = 7
-                }
-                SidebarButton {
-                    text: "Pool"
-                    onClicked: root.currentIndex = 8
-                }
-                SidebarButton {
-                    text: "Settings"
-                    onClicked: root.currentIndex = 9
                 }
             }
         }
@@ -105,18 +85,12 @@ ApplicationWindow {
                 currentIndex: root.currentIndex
 
                 Home        { Layout.fillWidth: true; Layout.fillHeight: true }
+                Map         { Layout.fillWidth: true; Layout.fillHeight: true }
                 Peers       { Layout.fillWidth: true; Layout.fillHeight: true }
                 Transaction { Layout.fillWidth: true; Layout.fillHeight: true }
                 Chain       { Layout.fillWidth: true; Layout.fillHeight: true }
-                Header      { Layout.fillWidth: true; Layout.fillHeight: true }
-                Block       { Layout.fillWidth: true; Layout.fillHeight: true }
-                Kernel      { Layout.fillWidth: true; Layout.fillHeight: true }
-                Output      { Layout.fillWidth: true; Layout.fillHeight: true }
-                Pool        { Layout.fillWidth: true; Layout.fillHeight: true }
-                Settings    { Layout.fillWidth: true; Layout.fillHeight: true }
             }
         }
-
     }
 
     // ---------------- Eigene Property ----------------

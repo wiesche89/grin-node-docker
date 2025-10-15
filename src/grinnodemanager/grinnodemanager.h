@@ -2,43 +2,156 @@
 #define GRINNODEMANAGER_H
 
 #include <QObject>
-#include <QProcess>
-#include <QDebug>
-#include <QCoreApplication>
+#include <QNetworkAccessManager>
+#include <QNetworkRequest>
+#include <QNetworkReply>
+#include <QUrl>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
 #include <QTimer>
-
-#ifdef Q_OS_WIN
-#include <windows.h>
-#endif
-
-#ifdef Q_OS_LINUX
-#include <sys/types.h>
-#include <unistd.h>
-#include <sys/prctl.h>
-#include <signal.h>
-#endif
+#include <QDebug>
 
 class GrinNodeManager : public QObject
 {
     Q_OBJECT
+    Q_PROPERTY(QUrl baseUrl READ baseUrl WRITE setBaseUrl NOTIFY baseUrlChanged)
+    Q_PROPERTY(QString lastResponse READ lastResponse NOTIFY lastResponseChanged)
+    // Optional: direkt in QML setzbar
+    Q_PROPERTY(QString username READ username WRITE setUsername NOTIFY optionsChanged)
+    Q_PROPERTY(QString password READ password WRITE setPassword NOTIFY optionsChanged)
+    Q_PROPERTY(int timeoutMs READ timeoutMs WRITE setTimeoutMs NOTIFY optionsChanged)
+    Q_PROPERTY(QString userAgent READ userAgent WRITE setUserAgent NOTIFY optionsChanged)
 public:
-    explicit GrinNodeManager(QObject *parent = nullptr);
-    ~GrinNodeManager();
+    enum class NodeKind {
+        Rust, GrinPP
+    };
+    Q_ENUM(NodeKind)
 
-    bool startNode(QString network);
-    void stopNode();
-    bool isNodeRunning() const;
+    struct Options {
+        QString username;
+        QString password;
+        int timeoutMs;
+        QByteArray userAgent;
+        Options() : timeoutMs(15000),
+            userAgent("GrinNodeManager/1.0")
+        {
+        }
+    };
+
+    // <<< NEU: parameterloser Ctor für QML >>>
+    explicit GrinNodeManager(QObject *parent = nullptr);
+
+    // vorhandener Ctor bleibt
+    explicit GrinNodeManager(const QUrl &baseUrl, const Options &opts = Options(), QObject *parent = nullptr);
+    ~GrinNodeManager() override;
+
+    // QML API (unverändert) ...
+    Q_INVOKABLE void getStatus();
+    Q_INVOKABLE void startRust(const QStringList &args = {});
+    Q_INVOKABLE void stopRust();
+    Q_INVOKABLE void restartRust(const QStringList &args = {});
+    Q_INVOKABLE void getLogsRust(int n = 100);
+    Q_INVOKABLE void startGrinPP(const QStringList &args = {});
+    Q_INVOKABLE void stopGrinPP();
+    Q_INVOKABLE void restartGrinPP(const QStringList &args = {});
+    Q_INVOKABLE void getLogsGrinPP(int n = 100);
+    Q_INVOKABLE void getPeers();
+    Q_INVOKABLE void startStatusPolling(int intervalMs);
+    Q_INVOKABLE void stopStatusPolling();
+    Q_INVOKABLE void startConnectedPeersPolling(int intervalMs);
+    Q_INVOKABLE void stopConnectedPeersPolling();
+
+    // Properties
+    QUrl baseUrl() const
+    {
+        return m_baseUrl;
+    }
+
+    void setBaseUrl(const QUrl &u);
+    QString lastResponse() const
+    {
+        return m_lastResponse;
+    }
+
+    // Options als Properties
+    QString username() const
+    {
+        return m_opts.username;
+    }
+
+    void setUsername(const QString &u)
+    {
+        m_opts.username = u;
+        emit optionsChanged();
+    }
+
+    QString password() const
+    {
+        return m_opts.password;
+    }
+
+    void setPassword(const QString &p)
+    {
+        m_opts.password = p;
+        emit optionsChanged();
+    }
+
+    int timeoutMs() const
+    {
+        return m_opts.timeoutMs;
+    }
+
+    void setTimeoutMs(int t)
+    {
+        m_opts.timeoutMs = t;
+        emit optionsChanged();
+    }
+
+    QString userAgent() const
+    {
+        return QString::fromUtf8(m_opts.userAgent);
+    }
+
+    void setUserAgent(const QString &ua)
+    {
+        m_opts.userAgent = ua.toUtf8();
+        emit optionsChanged();
+    }
+
+signals:
+    void statusReceived(const QJsonObject &json);
+    void peersReceived(const QJsonArray &peers);
+    void logsReceived(const QString &logs);
+    void nodeStarted(GrinNodeManager::NodeKind kind);
+    void nodeStopped(GrinNodeManager::NodeKind kind);
+    void nodeRestarted(GrinNodeManager::NodeKind kind);
+    void lastResponseChanged();
+    void baseUrlChanged();
+    void optionsChanged();
+    void errorOccurred(const QString &message);
+
+private slots:
+    void onReplyFinished(QNetworkReply *reply);
 
 private:
-    void setupJobObject();
+    // Hilfsinit, von beiden Ctors aufgerufen
+    void initNetwork();
 
-    QProcess *m_nodeProcess;
+    void start(NodeKind kind, const QStringList &args);
+    void stop(NodeKind kind);
+    void restart(NodeKind kind, const QStringList &args);
+    void getLogs(NodeKind kind, int n);
+    QNetworkRequest makeRequest(const QString &path) const;
+    QByteArray basicAuthHeader() const;
+    QString kindToPath(NodeKind kind) const;
 
-    #ifdef Q_OS_WIN
-    HANDLE m_jobHandle;
-    #endif
-
-    int m_pid;
+    QUrl m_baseUrl;
+    Options m_opts;
+    QNetworkAccessManager *m_net{nullptr};
+    QTimer m_statusTimer;
+    QTimer m_peersTimer;
+    QString m_lastResponse;
 };
 
 #endif // GRINNODEMANAGER_H

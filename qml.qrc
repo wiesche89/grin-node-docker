@@ -9,13 +9,8 @@
         <file>qml/Peers.qml</file>
         <file>qml/Transaction.qml</file>
         <file>qml/Chain.qml</file>
-        <file>qml/Header.qml</file>
-        <file>qml/Block.qml</file>
-        <file>qml/Kernel.qml</file>
-        <file>qml/Output.qml</file>
-        <file>qml/Pool.qml</file>
         <file>qml/PeerMarker.qml</file>
-        <file>qml/Settings.qml</file>
+        <file>qml/Map.qml</file>
     </qresource>
     <qresource prefix="/"/>
 </RCC>

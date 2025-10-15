@@ -1,14 +1,15 @@
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
+#include <QQuickStyle>
 #include <QIcon>
 #include <QFile>
 #include <QDir>
 
-// #include "grinnodemanager/grinnodemanager.h"
-
+#include "grinnodemanager.h"
 #include "nodeforeignapi.h"
 #include "nodeownerapi.h"
+#include "config.h"
 
 #include "blindingfactor.h"
 #include "blockheaderprintable.h"
@@ -40,8 +41,6 @@
 #include "commitment.h"
 #include "output.h"
 #include "geolookup.h"
-
-#include "config/config.h"
 
 /**
  * @brief registerAllMetaTypes
@@ -80,6 +79,10 @@ void registerAllMetaTypes()
     qRegisterMetaType<Output>("Output");
 
     qRegisterMetaType<GeoLookup>("GeoLookup");
+
+    qmlRegisterType<GrinNodeManager>("Grin", 1, 0, "GrinNodeManager");
+
+    qRegisterMetaType<QList<PoolEntry> >("QList<PoolEntry>");
 }
 
 /**
@@ -115,14 +118,17 @@ int main(int argc, char *argv[])
     QString foreignUrl;
     QString foreignAuth;
     QString network;
+    QString port;
 
-    network = "test"; // main or test
+    network = "main"; // main or test
+    port = "3413"; // main = 3413 or test = 13413
 
     // -----------------------------------------------------------------------------------------------------------------------
     // App configuration
     // -----------------------------------------------------------------------------------------------------------------------
     QGuiApplication app(argc, argv);
-    app.setWindowIcon(QIcon(":/res/media/logo.png"));
+    QQuickStyle::setStyle("Fusion");   // oder "Basic", "Material", "Imagine"
+    app.setWindowIcon(QIcon(":/res/media/grin-node/logo.png"));
 
     // -----------------------------------------------------------------------------------------------------------------------
     // Registration
@@ -131,18 +137,10 @@ int main(int argc, char *argv[])
     qmlRegisterType<GeoLookup>("Geo", 1, 0, "GeoLookup");
 
     // -----------------------------------------------------------------------------------------------------------------------
-    // Instance NodeManager
-    // -----------------------------------------------------------------------------------------------------------------------
-    // GrinNodeManager manager;
-    // if (!manager.startNode(network)) {
-    // return -10;
-    // }
-
-    // -----------------------------------------------------------------------------------------------------------------------
     // API configuration
     // -----------------------------------------------------------------------------------------------------------------------
-    ownerUrl = "http://127.0.0.1:13413/v2/owner";
-    foreignUrl = "http://127.0.0.1:13413/v2/foreign";
+    ownerUrl = QString("http://127.0.0.1:%1/v2/owner").arg(port);
+    foreignUrl = QString("http://127.0.0.1:%1/v2/foreign").arg(port);
 
     // Username & Passwort
     QString username = "grin";
@@ -157,6 +155,11 @@ int main(int argc, char *argv[])
 
     QString concatenatedForeign = username + ":" + passwordForeign;
     foreignAuth = "Basic " + concatenatedForeign.toUtf8().toBase64();
+
+    qDebug() << "ownerAuth: " << ownerAuth;
+    qDebug() << "foreignAuth: " << foreignAuth;
+
+    qDebug() << "QDir::homePath(): " << QDir::homePath();
 
     // Node Owner Api Instance
     NodeOwnerApi *nodeOwnerApi = new NodeOwnerApi(ownerUrl, ownerAuth);
@@ -184,9 +187,6 @@ int main(int argc, char *argv[])
     if (engine.rootObjects().isEmpty()) {
         return -1;
     }
-
-    nodeOwnerApi->startStatusPolling(10000);
-    nodeOwnerApi->startConnectedPeersPolling(5000);
 
     return app.exec();
 }

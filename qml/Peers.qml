@@ -1,114 +1,204 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
-import Geo 1.0   // unser C++-Typ GeoLookup
+import QtQuick.Layouts 2.15
+import QtQuick.Window 2.15
 
 Item {
-    id: peersRoot
-    z: 1000   // liegt über dem Hintergrund
+    id: root
+    Layout.fillWidth: true
+    Layout.fillHeight: true
+    property bool useDummyData: true        // 🔹 zum Testen aktivieren
+    property var peers: []                  // 🔹 Peer-Liste
 
-    // Zoomstufe für Europa
-    property int zoomLevel: 3
-    property int tileSize: 256
-    property int tilesPerRow: Math.pow(2, zoomLevel)
+    signal refreshRequested()
+    signal banRequested(string addr)
+    signal unbanRequested(string addr)
 
-    // Liste der Marker
-    property var peerMarkers: []
+    // ---------------------------------------------
+    // Custom Dark Components
+    // ---------------------------------------------
+    Component {
+        id: darkButtonComponent
+        Button {
+            id: control
+            property color bg: hovered ? "#3a3a3a" : "#2b2b2b"
+            property color fg: enabled ? "white" : "#777"
+            flat: true
+            padding: 10
 
-    GeoLookup {
-        id: geoLookup
-        // wenn C++ fertig ist mit den Koordinaten:
-        onLookupFinished: function(coords) {
-            var markers = []
-            for (var i = 0; i < coords.length; ++i) {
-                var lat = coords[i].lat
-                var lon = coords[i].lon
-                var tileCount = Math.pow(2, peersRoot.zoomLevel)
-                var x = (lon + 180.0) / 360.0 * tileCount * peersRoot.tileSize
-                var y = (1.0 - Math.log(Math.tan(lat * Math.PI / 180.0) + 1.0 / Math.cos(lat * Math.PI / 180.0)) / Math.PI) / 2.0 * tileCount * peersRoot.tileSize
-                markers.push({ "x": x, "y": y })
+            background: Rectangle {
+                radius: 6
+                color: control.down ? "#2f2f2f" : control.bg
+                border.color: control.down ? "#e0c045" : "#555"
+                border.width: 1
             }
-            peersRoot.peerMarkers = markers
+            contentItem: Text {
+                text: control.text
+                color: control.fg
+                font.pixelSize: 14
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+                elide: Text.ElideRight
+            }
         }
     }
 
-    Flickable {
-        id: mapView
+    // ---------------------------------------------
+    // Layout
+    // ---------------------------------------------
+    ColumnLayout {
         anchors.fill: parent
-        contentWidth: tileSize * tilesPerRow
-        contentHeight: tileSize * tilesPerRow
-        clip: true
+        anchors.margins: 20
+        spacing: 14
 
-        Component.onCompleted: {
-            var centerLat = 80;   // Deutschland
-            var centerLon = -50;   // Deutschland
+        // 🔹 Titelzeile
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 10
 
-            var latRad = centerLat * Math.PI / 180.0;
-            var tileCount = Math.pow(2, peersRoot.zoomLevel);
+            Label {
+                text: "Peers"
+                color: "white"
+                font.pixelSize: 28
+                font.bold: true
+                Layout.fillWidth: true
+            }
 
-            var centerX = (centerLon + 180.0) / 360.0 * tileCount * peersRoot.tileSize;
-            var centerY = (1.0 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2.0 * tileCount * peersRoot.tileSize;
-
-            console.log("Center X:", centerX, "Center Y:", centerY);
-
-            contentX = centerX - width / 2;
-            contentY = centerY - height / 2;
-        }
-
-        // Karten-Kacheln
-        Repeater {
-            model: tilesPerRow * tilesPerRow
-            delegate: Image {
-                width: tileSize
-                height: tileSize
-                x: (index % tilesPerRow) * tileSize
-                y: Math.floor(index / tilesPerRow) * tileSize
-                source: {
-                    const xIndex = index % tilesPerRow
-                    const yIndex = Math.floor(index / tilesPerRow)
-                    return "https://a.tile.openstreetmap.de/"
-                           + zoomLevel + "/" + xIndex + "/" + yIndex + ".png"
+            Loader {
+                id: refreshButton
+                sourceComponent: darkButtonComponent
+                onLoaded: {
+                    item.text = "↻ Refresh"
+                    item.onClicked.connect(function() {
+                        if (root.useDummyData)
+                            root.loadDummyPeers()
+                        else
+                            root.refreshRequested()
+                    })
                 }
-                fillMode: Image.PreserveAspectFit
-                cache: true
             }
         }
 
-        // Marker
-        Repeater {
-            model: peersRoot.peerMarkers
-            delegate: Rectangle {
-                width: 10
-                height: 10
-                radius: 8
-                color: "yellow"
-                border.color: "black"
-                border.width: 2
-                x: modelData.x - width / 2
-                y: modelData.y - height / 2
-            }
-        }
-    }
+        // 🔹 Scrollbare Peer-Liste
+        ScrollView {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            clip: true
 
-    // Verbindung zu deiner Node API
-    Connections {
-        target: nodeOwnerApi
-        function onConnectedPeersUpdated(peersArray) {
-            var ipList = []
-            for (var i = 0; i < peersArray.length; i++) {
-                var peer = peersArray[i]
-                if (peer.addr && peer.addr.asString) {
-                    // Beispiel: "123.45.67.89:13414"
-                    var ipOnly = peer.addr.asString.split(":")[0]
-                    if (ipList.indexOf(ipOnly) === -1) {
-                        ipList.push(ipOnly)
+            ListView {
+                id: peerList
+                model: peers
+                spacing: 6
+                delegate: Rectangle {
+                    width: parent.width
+                    height: 60
+                    radius: 8
+                    color: hovered ? "#2e2e2e" : "#242424"
+                    border.color: "#333"
+                    border.width: 1
+
+                    property bool hovered: false
+                    MouseArea {
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        onEntered: parent.hovered = true
+                        onExited: parent.hovered = false
+                    }
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.margins: 10
+                        spacing: 10
+
+                        Label {
+                            text: modelData.address
+                            color: "white"
+                            font.pixelSize: 15
+                            Layout.fillWidth: true
+                        }
+
+                        Label {
+                            text: "State: " + modelData.state
+                            color: "#aaa"
+                            font.pixelSize: 13
+                        }
+
+                        Loader {
+                            sourceComponent: darkButtonComponent
+                            onLoaded: {
+                                item.text = modelData.banned ? "Unban" : "Ban"
+                                item.onClicked.connect(function() {
+                                    if (modelData.banned)
+                                        root.unbanRequested(modelData.address)
+                                    else
+                                        root.banRequested(modelData.address)
+                                })
+                            }
+                        }
                     }
                 }
             }
-            if (ipList.length > 0) {
-                geoLookup.lookupIPs(ipList)
-            } else {
-                peersRoot.peerMarkers = []
+
+            ScrollBar.vertical: ScrollBar {
+                policy: ScrollBar.AsNeeded
+                contentItem: Rectangle {
+                    implicitWidth: 6
+                    radius: 3
+                    color: "#606060"
+                    opacity: 0.4
+                }
             }
         }
+    }
+
+    // ---------------------------------------------
+    // Dummy Daten laden
+    // ---------------------------------------------
+    function loadDummyPeers() {
+        peers = [
+            { address: "192.168.1.12:3414", state: "Connected", banned: false },
+            { address: "88.99.23.42:3414",  state: "Banned",    banned: true },
+            { address: "10.0.0.3:3414",     state: "Connected", banned: false },
+            { address: "45.76.11.5:3414",   state: "Disconnected", banned: false },
+            { address: "peer.grin.mw:3414", state: "Connected", banned: false }
+        ]
+    }
+
+    // ---------------------------------------------
+    // Externe Callbacks aus C++
+    // ---------------------------------------------
+    function onGetPeersFinished(result) {
+        if (result.ok)
+            peers = result.value
+        else
+            console.log("getPeers failed:", result.error)
+    }
+
+    function onBanPeerFinished(result) {
+        if (result.ok) {
+            console.log("Peer banned")
+            if (root.useDummyData) root.loadDummyPeers()
+        } else {
+            console.log("banPeer failed:", result.error)
+        }
+    }
+
+    function onUnbanPeerFinished(result) {
+        if (result.ok) {
+            console.log("Peer unbanned")
+            if (root.useDummyData) root.loadDummyPeers()
+        } else {
+            console.log("unbanPeer failed:", result.error)
+        }
+    }
+
+    // ---------------------------------------------
+    // Initial
+    // ---------------------------------------------
+    Component.onCompleted: {
+        if (useDummyData)
+            loadDummyPeers()
+        else
+            refreshRequested()
     }
 }

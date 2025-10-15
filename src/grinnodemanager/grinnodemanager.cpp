@@ -1,185 +1,252 @@
 #include "grinnodemanager.h"
+#include <QJsonDocument>
+#include <QJsonParseError>
+#include <QDebug>
 
-/**
- * @brief GrinNodeManager::GrinNodeManager
- * @param parent
- */
+static inline QString safePretty(const QByteArray &data)
+{
+    QJsonParseError err{};
+    const auto doc = QJsonDocument::fromJson(data, &err);
+    if (err.error == QJsonParseError::NoError) {
+        return QString::fromUtf8(doc.toJson(QJsonDocument::Indented));
+    }
+    return QString::fromUtf8(data);
+}
+
+// Gemeinsames Init
+void GrinNodeManager::initNetwork()
+{
+    if (!m_net) {
+        m_net = new QNetworkAccessManager(this);
+    }
+    connect(m_net, &QNetworkAccessManager::finished,
+            this, &GrinNodeManager::onReplyFinished);
+
+    m_statusTimer.setSingleShot(false);
+    connect(&m_statusTimer, &QTimer::timeout, this, &GrinNodeManager::getStatus);
+
+    m_peersTimer.setSingleShot(false);
+    connect(&m_peersTimer, &QTimer::timeout, this, &GrinNodeManager::getPeers);
+}
+
+// NEU: Default-Ctor für QML
 GrinNodeManager::GrinNodeManager(QObject *parent) :
+    QObject(parent)
+{
+    initNetwork();
+}
+
+// Bisheriger Ctor bleibt
+GrinNodeManager::GrinNodeManager(const QUrl &baseUrl, const Options &opts, QObject *parent) :
     QObject(parent),
-    m_nodeProcess(new QProcess(this)),
-    m_pid(-1)
+    m_baseUrl(baseUrl),
+    m_opts(opts)
 {
-    #ifdef Q_OS_WIN
-    m_jobHandle = nullptr;
-    #endif
-
-    setupJobObject();
-
-    connect(qApp, &QCoreApplication::aboutToQuit, this, &GrinNodeManager::stopNode);
-
-    connect(m_nodeProcess, &QProcess::readyReadStandardOutput, [this]() {
-        QStringList stdOut = QString::fromUtf8(m_nodeProcess->readAllStandardOutput()).split("\r\n");
-
-        for (int i = 0; i < stdOut.length(); i++) {
-            qDebug() << stdOut[i];
-        }
-    });
-
-    connect(m_nodeProcess, &QProcess::readyReadStandardError, [this]() {
-        QStringList stdOut = QString::fromUtf8(m_nodeProcess->readAllStandardOutput()).split("\r\n");
-
-        for (int i = 0; i < stdOut.length(); i++) {
-            qDebug() << stdOut[i];
-        }
-    });
+    initNetwork();
 }
 
-/**
- * @brief GrinNodeManager::~GrinNodeManager
- */
-GrinNodeManager::~GrinNodeManager()
-{
-    stopNode();
+GrinNodeManager::~GrinNodeManager() = default;
 
-    #ifdef Q_OS_WIN
-    if (m_jobHandle) {
-        CloseHandle(m_jobHandle);
-        m_jobHandle = nullptr;
+// ---------- QML wrappers ----------
+void GrinNodeManager::startRust(const QStringList &args)
+{
+    start(NodeKind::Rust, args);
+}
+
+void GrinNodeManager::stopRust()
+{
+    stop(NodeKind::Rust);
+}
+
+void GrinNodeManager::restartRust(const QStringList &args)
+{
+    restart(NodeKind::Rust, args);
+}
+
+void GrinNodeManager::getLogsRust(int n)
+{
+    getLogs(NodeKind::Rust, n);
+}
+
+void GrinNodeManager::startGrinPP(const QStringList &args)
+{
+    start(NodeKind::GrinPP, args);
+}
+
+void GrinNodeManager::stopGrinPP()
+{
+    stop(NodeKind::GrinPP);
+}
+
+void GrinNodeManager::restartGrinPP(const QStringList &args)
+{
+    restart(NodeKind::GrinPP, args);
+}
+
+void GrinNodeManager::getLogsGrinPP(int n)
+{
+    getLogs(NodeKind::GrinPP, n);
+}
+
+// ---------- Public API ----------
+void GrinNodeManager::getStatus()
+{
+    QNetworkRequest req = makeRequest("/status");
+    m_net->get(req);
+}
+
+void GrinNodeManager::getPeers()
+{
+    // Passe Pfad an deinen Controller an (z. B. "/peers" oder "/status/peers")
+    QNetworkRequest req = makeRequest("/peers");
+    m_net->get(req);
+}
+
+// Polling
+void GrinNodeManager::startStatusPolling(int intervalMs)
+{
+    if (intervalMs < 1000) {
+        intervalMs = 1000;
     }
-    #elif defined(Q_OS_LINUX)
-    // Unter Linux ist kein Handle zu schließen
-    qInfo() << "No job object cleanup required on Linux.";
-    #endif
+    m_statusTimer.start(intervalMs);
 }
 
-/**
- * @brief GrinNodeManager::setupJobObject
- */
-void GrinNodeManager::setupJobObject()
+void GrinNodeManager::stopStatusPolling()
 {
-#ifdef Q_OS_WIN
-    m_jobHandle = CreateJobObject(nullptr, nullptr);
-    if (m_jobHandle == nullptr) {
-        qWarning() << "CreateJobObject failed:" << GetLastError();
+    m_statusTimer.stop();
+}
+
+void GrinNodeManager::startConnectedPeersPolling(int intervalMs)
+{
+    if (intervalMs < 1000) {
+        intervalMs = 1000;
+    }
+    m_peersTimer.start(intervalMs);
+}
+
+void GrinNodeManager::stopConnectedPeersPolling()
+{
+    m_peersTimer.stop();
+}
+
+// ---------- Core helpers ----------
+void GrinNodeManager::start(NodeKind kind, const QStringList &args)
+{
+    QNetworkRequest req = makeRequest("/start/" + kindToPath(kind));
+    req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+
+    QJsonObject json;
+    if (!args.isEmpty()) {
+        json["args"] = QJsonArray::fromStringList(args);
+    }
+
+    m_net->post(req, QJsonDocument(json).toJson());
+}
+
+void GrinNodeManager::stop(NodeKind kind)
+{
+    QNetworkRequest req = makeRequest("/stop/" + kindToPath(kind));
+    m_net->post(req, QByteArray());
+}
+
+void GrinNodeManager::restart(NodeKind kind, const QStringList &args)
+{
+    QNetworkRequest req = makeRequest("/restart/" + kindToPath(kind));
+    req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+
+    QJsonObject json;
+    if (!args.isEmpty()) {
+        json["args"] = QJsonArray::fromStringList(args);
+    }
+
+    m_net->post(req, QJsonDocument(json).toJson());
+}
+
+void GrinNodeManager::getLogs(NodeKind kind, int n)
+{
+    QNetworkRequest req = makeRequest("/logs/" + kindToPath(kind) + "?n=" + QString::number(n));
+    m_net->get(req);
+}
+
+// ---------- Utils ----------
+QNetworkRequest GrinNodeManager::makeRequest(const QString &path) const
+{
+    QUrl url = m_baseUrl.resolved(QUrl(path));
+    QNetworkRequest req(url);
+    req.setRawHeader("User-Agent", m_opts.userAgent);
+    if (!m_opts.username.isEmpty()) {
+        req.setRawHeader("Authorization", basicAuthHeader());
+    }
+    return req;
+}
+
+QByteArray GrinNodeManager::basicAuthHeader() const
+{
+    const QByteArray token = QString("%1:%2").arg(m_opts.username, m_opts.password).toUtf8().toBase64();
+    return "Basic " + token;
+}
+
+QString GrinNodeManager::kindToPath(NodeKind kind) const
+{
+    return (kind == NodeKind::Rust) ? "rust" : "grinpp";
+}
+
+void GrinNodeManager::setBaseUrl(const QUrl &u)
+{
+    if (u == m_baseUrl) {
+        return;
+    }
+    m_baseUrl = u;
+    emit baseUrlChanged();
+}
+
+// ---------- Reply dispatch ----------
+void GrinNodeManager::onReplyFinished(QNetworkReply *reply)
+{
+    const QUrl url = reply->request().url();
+    const QString path = url.path();
+    const QByteArray payload = reply->readAll();
+
+    auto finish = [&] {
+                      const QString pretty = safePretty(payload);
+                      if (pretty != m_lastResponse) {
+                          m_lastResponse = pretty;
+                          emit lastResponseChanged();
+                      }
+                  };
+
+    if (reply->error() != QNetworkReply::NoError) {
+        emit errorOccurred(QString("[%1] %2").arg(url.toString(), reply->errorString()));
+        finish();
+        reply->deleteLater();
         return;
     }
 
-    // Set up the job object to kill all child processes when the job is closed
-    JOBOBJECT_EXTENDED_LIMIT_INFORMATION jeli = {};
-    jeli.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-
-    if (!SetInformationJobObject(m_jobHandle, JobObjectExtendedLimitInformation, &jeli, sizeof(jeli))) {
-        qWarning() << "SetInformationJobObject failed:" << GetLastError();
-        CloseHandle(m_jobHandle);
-        m_jobHandle = nullptr;
-    }
-#elif defined(Q_OS_LINUX)
-    // Linux: nothing to initialize here, but we can log it
-    qInfo() << "Job object setup not required on Linux.";
-#endif
-}
-
-/**
- * @brief GrinNodeManager::startNode
- */
-bool GrinNodeManager::startNode(QString network)
-{
-    if (isNodeRunning()) {
-        qCritical() << "Node process already running.";
-        return false;
-    }
-
-    QString program;
-
-    #ifdef Q_OS_WIN
-    program = "grin";
-    #else
-    program = "./grin";
-    #endif
-
-    if (network == "test") {
-        m_nodeProcess->start(program, {"--testnet"});
-    } else if (network == "main") {
-        m_nodeProcess->start(program);
-    } else {
-        qDebug() << "network is undefined!";
-        return false;
-    }
-
-    if (!m_nodeProcess->waitForStarted(3000)) {
-        qCritical() << "Error: grin process could not be started.";
-        return false;
-    }
-
-    qDebug() << "waitForStarted success ";
-
-#ifdef Q_OS_WIN
-    HANDLE processHandle = (HANDLE)m_nodeProcess->processId();
-    if (m_jobHandle && processHandle) {
-        HANDLE hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, m_nodeProcess->processId());
-        if (hProcess) {
-            if (!AssignProcessToJobObject(m_jobHandle, hProcess)) {
-                qWarning() << "AssignProcessToJobObject failed:" << GetLastError();
+    // Route by endpoint
+    if (path.endsWith("/status")) {
+        const auto doc = QJsonDocument::fromJson(payload);
+        emit statusReceived(doc.object());
+    } else if (path.contains("/logs/")) {
+        emit logsReceived(QString::fromUtf8(payload));
+    } else if (path.contains("/start/")) {
+        emit nodeStarted(path.contains("rust") ? NodeKind::Rust : NodeKind::GrinPP);
+    } else if (path.contains("/stop/")) {
+        emit nodeStopped(path.contains("rust") ? NodeKind::Rust : NodeKind::GrinPP);
+    } else if (path.contains("/restart/")) {
+        emit nodeRestarted(path.contains("rust") ? NodeKind::Rust : NodeKind::GrinPP);
+    } else if (path.contains("/peers")) {
+        // Expect JSON array; if object, try to unwrap "peers"
+        QJsonParseError err{};
+        const auto doc = QJsonDocument::fromJson(payload, &err);
+        if (err.error == QJsonParseError::NoError) {
+            if (doc.isArray()) {
+                emit peersReceived(doc.array());
+            } else if (doc.isObject() && doc.object().contains("peers") && doc.object().value("peers").isArray()) {
+                emit peersReceived(doc.object().value("peers").toArray());
             }
-            CloseHandle(hProcess);
-        } else {
-            qWarning() << "OpenProcess failed:" << GetLastError();
         }
     }
-#elif defined(Q_OS_LINUX)
-    pid_t pid = m_nodeProcess->processId();
-    if (pid > 0) {
-        // Set child to new process group so it can be killed later with killpg
-        if (setpgid(pid, pid) != 0) {
-            perror("setpgid failed");
-        }
-        // Optional: ensure child dies with parent
-        if (prctl(PR_SET_PDEATHSIG, SIGTERM) != 0) {
-            perror("prctl(PR_SET_PDEATHSIG) failed");
-        }
-    }
-#endif
 
-    m_pid = m_nodeProcess->processId();
-    qDebug() << "grin started, PID:" << m_pid;
-
-    QTimer *monitorTimer = new QTimer(this);
-    QObject::connect(monitorTimer, &QTimer::timeout, [&]() {
-        if (m_nodeProcess->processId() != m_pid) {
-            qDebug() << "grin process was terminated.";
-            monitorTimer->stop();
-            QCoreApplication::quit();
-        }
-    });
-    monitorTimer->start(1000);
-
-    return true;
-}
-
-/**
- * @brief GrinNodeManager::stopNode
- */
-void GrinNodeManager::stopNode()
-{
-    if (!isNodeRunning()) {
-        return;
-    }
-
-    qDebug() << "Close grin...";
-
-    m_nodeProcess->terminate();
-    if (!m_nodeProcess->waitForFinished(3000)) {
-        qDebug() << "Process does not respond, force kill.";
-        m_nodeProcess->kill();
-        m_nodeProcess->waitForFinished(3000);
-    }
-}
-
-/**
- * @brief GrinNodeManager::isNodeRunning
- * @return
- */
-bool GrinNodeManager::isNodeRunning() const
-{
-    return m_nodeProcess->state() != QProcess::NotRunning;
+    finish();
+    reply->deleteLater();
 }

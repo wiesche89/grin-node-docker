@@ -1,16 +1,30 @@
 <RCC>
     <qresource prefix="/res">
-        <file>media/image7.jpg</file>
-        <file>media/image8.jpg</file>
-        <file>media/image9.jpg</file>
-        <file>media/image1.png</file>
-        <file>media/image2.png</file>
-        <file>media/image4.jpg</file>
-        <file>media/image5.jpg</file>
-        <file>media/image3.jpg</file>
-        <file>media/image6.jpg</file>
-        <file>media/Image10.jpg</file>
-        <file>media/logo.png</file>
+        <file>media/grin-mesh/image1.png</file>
+        <file>media/grin-mesh/image2.png</file>
+        <file>media/grin-mesh/image3.jpg</file>
+        <file>media/grin-mesh/image4.jpg</file>
+        <file>media/grin-mesh/image5.jpg</file>
+        <file>media/grin-mesh/image6.jpg</file>
+        <file>media/grin-mesh/image7.jpg</file>
+        <file>media/grin-mesh/image8.jpg</file>
+        <file>media/grin-mesh/image9.jpg</file>
+        <file>media/grin-mesh/Image10.jpg</file>
+        <file>media/grin-mesh/logo.png</file>
+        <file>media/grin-mesh/video1.mp4</file>
+        <file>media/grin-node/image_1.jpg</file>
+        <file>media/grin-node/image_2.jpg</file>
+        <file>media/grin-node/image_3.jpg</file>
+        <file>media/grin-node/image_4.jpg</file>
+        <file>media/grin-node/image_5.jpg</file>
+        <file>media/grin-node/image_6.jpg</file>
+        <file>media/grin-node/image_7.jpg</file>
+        <file>media/grin-node/image_8.jpg</file>
+        <file>media/grin-node/image_9.jpg</file>
+        <file>media/grin-node/image_10.jpg</file>
+        <file>media/grin-node/image_11.jpg</file>
+        <file>media/grin-node/image_12.jpg</file>
+        <file>media/grin-node/logo.png</file>
     </qresource>
     <qresource prefix="/"/>
 </RCC>
