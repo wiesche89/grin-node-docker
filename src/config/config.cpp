@@ -62,10 +62,20 @@ bool Config::save()
  * @param network
  * @return
  */
-bool Config::loadFromNetwork(const QString &network)
+bool Config::loadFromNetwork(const QString &network, bool local)
 {
-    const QString p = QString("%1/.grin/%2/grin-server.toml")
+    QString p;
+
+    if(local)
+    {
+    p = QString("%1/.grin/%2/grin-server.toml")
                       .arg(QDir::homePath(), network);
+    }
+    else
+    {
+        p = QString("/data/grin-server.toml");
+    }
+
     setPath(p);
     return load();
 }
