@@ -14,6 +14,7 @@ Item {
     property bool isBooting: false
     property string currentNodeKind: "none"   // "none" | "rust" | "grinpp"
     property string nodeState: "none"  // "none" | "rustStarting" | "grinppStarting" | "rust" | "grinpp"
+    property bool nodeRunning: isRustRunning() || isGrinppRunning()
     function isRustRunning()   { return nodeState === "rust"; }
     function isGrinppRunning() { return nodeState === "grinpp"; }
     function isStarting()      { return nodeState === "rustStarting" || nodeState === "grinppStarting"; }

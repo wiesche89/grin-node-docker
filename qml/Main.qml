@@ -84,9 +84,18 @@ ApplicationWindow {
                 anchors.fill: parent
                 currentIndex: root.currentIndex
 
-                Home        { Layout.fillWidth: true; Layout.fillHeight: true }
+                Home {
+                    id: homePage            // <— wichtig
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                }
                 Map         { Layout.fillWidth: true; Layout.fillHeight: true }
-                Peers       { Layout.fillWidth: true; Layout.fillHeight: true }
+                Peers {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    // nur laden/aktualisieren, wenn Node wirklich läuft
+                    //nodeRunning: true
+                }
                 Transaction { Layout.fillWidth: true; Layout.fillHeight: true }
                 Chain       { Layout.fillWidth: true; Layout.fillHeight: true }
             }

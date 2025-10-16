@@ -83,6 +83,9 @@ void registerAllMetaTypes()
     qmlRegisterType<GrinNodeManager>("Grin", 1, 0, "GrinNodeManager");
 
     qRegisterMetaType<QList<PoolEntry> >("QList<PoolEntry>");
+    qRegisterMetaType<QList<PeerData> >("QList<PeerData>");
+    qRegisterMetaType<PeerAddr>("PeerAddr");
+
 }
 
 /**
