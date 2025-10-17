@@ -1,12 +1,13 @@
+// StatusView.qml
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import QtQuick.Effects    // für MultiEffect / DropShadow
+import QtQuick.Effects
 
 Rectangle {
     id: root
     width: parent ? parent.width : 600
-    height: childrenRect.height + 32   // Inhaltshöhe + 2x16 Margin
+    height: childrenRect.height + 32
     color: "#2b2b2b"
     radius: 6
     border.color: "#555"
@@ -23,8 +24,218 @@ Rectangle {
 
     // komplette Datenstruktur aus C++
     property var currentStatus: null
-    // neue Property für die Uhrzeit
     property string lastUpdated: ""
+
+    // ---------- Helper ----------
+    function readInfo(key) {
+        var obj = currentStatus ? (currentStatus.syncInfo || currentStatus.sync_info) : null
+        if (!obj) return undefined
+        if (obj[key] !== undefined) return obj[key]
+        try {
+            if (typeof obj.value === "function") {
+                var v = obj.value(key)
+                if (v !== undefined && v !== null) return v
+            }
+        } catch(e) {}
+        try {
+            var s = obj.jsonString || (obj.toString && obj.toString())
+            if (s && s.length && s.trim().charAt(0) === "{") {
+                var parsed = JSON.parse(s)
+                if (parsed && parsed[key] !== undefined) return parsed[key]
+            }
+        } catch(e) {}
+        return undefined
+    }
+
+    function toEpochMillis(ts) {
+        if (ts === null || ts === undefined) return NaN
+        if (typeof ts === "number") {
+            if (ts > 1e15) return ts / 1e6
+            if (ts > 1e12) return ts
+            return ts * 1000
+        }
+        if (typeof ts === "string") {
+            var t = Date.parse(ts)
+            return isNaN(t) ? NaN : t
+        }
+        try {
+            if (typeof ts.secs === "number" && typeof ts.nanos === "number") {
+                return ts.secs * 1000 + Math.floor(ts.nanos / 1e6)
+            }
+        } catch(e) {}
+        return NaN
+    }
+
+    function bytesToMB(n) {
+        var v = Number(n)
+        if (!isFinite(v)) return "0.0"
+        return (v / 1000000).toFixed(1)
+    }
+
+    // ---------- Status-Rohwert ----------
+    property string _syncStatus: currentStatus ? (currentStatus.syncStatus || currentStatus.sync_status || "") : ""
+
+    // ---- header_sync (für Info/Prozent) ----
+    property var _hdrCur:  readInfo("current_height")
+    property var _hdrMax:  readInfo("highest_height")
+    property bool _showHeaderSync: {
+        if (_syncStatus !== "header_sync") return false
+        var cur = Number(_hdrCur), max = Number(_hdrMax)
+        return isFinite(cur) && isFinite(max) && max > 0 && cur >= 0
+    }
+    property real  _hdrRatio: _showHeaderSync ? Math.max(0, Math.min(1, Number(_hdrCur) / Number(_hdrMax))) : 0
+    property string _hdrPct:  (_hdrRatio * 100).toFixed(2) + "%"
+
+    // ---- txhashsetpibd_download (PIBD) Info (completed_leaves / leaves_required) ----
+    // Unterstütze beide Schreibweisen: txhashsetpibd_download & txhashsetPibd_download
+    property var _pibdDone:  readInfo("completed_leaves")
+    property var _pibdTotal: readInfo("leaves_required")
+    property bool _isPibd: (_syncStatus === "txhashsetpibd_download" || _syncStatus === "txhashsetPibd_download")
+    property bool _showPibd: {
+        if (!_isPibd) return false
+        var total = Number(_pibdTotal), done = Number(_pibdDone)
+        return isFinite(total) && isFinite(done) && total > 0 && done >= 0
+    }
+    property real  _pibdRatio: _showPibd ? Math.max(0, Math.min(1, Number(_pibdDone) / Number(_pibdTotal))) : 0
+    property string _pibdPct:  (_pibdRatio * 100).toFixed(2) + "%"
+
+    // ---- txhashset_download (Download / Waiting) ----
+    // { downloaded_size, total_size, prev_downloaded_size, prev_update_time, start_time }
+    property var _txdlDone:        readInfo("downloaded_size")
+    property var _txdlTotal:       readInfo("total_size")
+    property var _txdlPrevDone:    readInfo("prev_downloaded_size")
+    property var _txdlPrevUpdate:  readInfo("prev_update_time")
+    property var _txdlStartTime:   readInfo("start_time")
+    property bool _showTxdlActive: _syncStatus === "txhashset_download"
+    property bool _txdlHasTotal: {
+        var tot = Number(_txdlTotal)
+        return isFinite(tot) && tot > 0
+    }
+    property string _txdlPct: {
+        if (!_showTxdlActive || !_txdlHasTotal) return ""
+        var done = Number(_txdlDone), tot = Number(_txdlTotal)
+        if (!isFinite(done) || !isFinite(tot) || tot <= 0) return ""
+        return (done * 100 / tot).toFixed(2) + "%"
+    }
+    property string _txdlSpeedText: {
+        if (!_showTxdlActive || !_txdlHasTotal) return ""
+        var prevMs = toEpochMillis(_txdlPrevUpdate)
+        var nowMs  = Date.now()
+        var durMs  = (isFinite(prevMs) ? (nowMs - prevMs) : NaN)
+        var done   = Number(_txdlDone)
+        var prev   = Number(_txdlPrevDone)
+        if (!isFinite(done) || !isFinite(prev) || !isFinite(durMs) || durMs <= 1) return "0.0"
+        var bytesPerMs = Math.max(0, done - prev) / durMs
+        return bytesPerMs.toFixed(1) // B/ms ≙ kB/s
+    }
+    property string _txdlWaitingSecs: {
+        if (!_showTxdlActive || _txdlHasTotal) return ""
+        var start = toEpochMillis(_txdlStartTime)
+        var now   = Date.now()
+        if (!isFinite(start)) return "0"
+        var secs = Math.max(0, Math.floor((now - start) / 1000))
+        return String(secs)
+    }
+
+    // ---- txhashset_setup ----
+    // { headers, headers_total, kernel_pos, kernel_pos_total }
+    property var _setupHeaders:        readInfo("headers")
+    property var _setupHeadersTotal:   readInfo("headers_total")
+    property var _setupKernelPos:      readInfo("kernel_pos")
+    property var _setupKernelPosTotal: readInfo("kernel_pos_total")
+
+    property bool _showSetup: _syncStatus === "txhashset_setup"
+    property bool _setupHasHeaders: {
+        var h = Number(_setupHeaders), ht = Number(_setupHeadersTotal)
+        return isFinite(h) && isFinite(ht) && ht > 0 && h >= 0
+    }
+    property bool _setupHasKernelPos: {
+        var k = Number(_setupKernelPos), kt = Number(_setupKernelPosTotal)
+        return isFinite(k) && isFinite(kt) && kt > 0 && k >= 0
+    }
+
+    // ---- txhashset_rangeproofs_validation ----
+    // { rproofs, rproofs_total }
+    property var _rpCount: readInfo("rproofs")
+    property var _rpTotal: readInfo("rproofs_total")
+    property bool _showRangeProofs: _syncStatus === "txhashset_rangeproofs_validation"
+    property string _rpPct: {
+        var rt = Number(_rpTotal)
+        var r  = Number(_rpCount)
+        var pct = (isFinite(rt) && rt > 0 && isFinite(r)) ? Math.floor(r * 100 / rt) : 0
+        return String(pct) + "%"
+    }
+
+    // ---- txhashset_kernels_validation ----
+    // { kernels, kernels_total }
+    property var _kvCount: readInfo("kernels")
+    property var _kvTotal: readInfo("kernels_total")
+    property bool _showKernels: _syncStatus === "txhashset_kernels_validation"
+    property string _kvPct: {
+        var kt = Number(_kvTotal)
+        var k  = Number(_kvCount)
+        var pct = (isFinite(kt) && kt > 0 && isFinite(k)) ? Math.floor(k * 100 / kt) : 0
+        return String(pct) + "%"
+    }
+
+    // ---- body_sync (7/7) ----
+    // { current_height, highest_height }
+    property var _bodyCur: readInfo("current_height")
+    property var _bodyMax: readInfo("highest_height")
+    property bool _showBody: _syncStatus === "body_sync"
+    property string _bodyPct: {
+        var cur = Number(_bodyCur), max = Number(_bodyMax)
+        var pct = (isFinite(max) && max > 0 && isFinite(cur)) ? Math.floor(cur * 100 / max) : 0
+        return String(pct) + "%"
+    }
+
+    // ---- Mapping der Sync-Status-Zeile (genau nach Vorgabe) ----
+    property string _syncStatusDisplay: {
+        switch (_syncStatus) {
+        case "initial":
+            return "Initializing"
+        case "no_sync":
+            return "Running"
+        case "awaiting_peers":
+            return "Waiting for peers"
+        case "header_sync":
+            return "Sync step 1/7: Downloading headers"
+        case "txhashsetpibd_download":
+        case "txhashsetPibd_download":
+            return "Sync step 2/7: Downloading Tx state (PIBD)"
+        case "txhashset_download":
+            // Download aktiv vs. Waiting (wie gefordert)
+            if (_txdlHasTotal)
+                return "Sync step 2/7: Downloading chain state for state sync"
+            else
+                return "Sync step 2/7: Downloading chain state for state sync. Waiting remote peer to start"
+        case "txhashset_setup":
+            if (_setupHasHeaders)
+                return "Sync step 3/7: Preparing for validation (kernel history)"
+            else if (_setupHasKernelPos)
+                return "Sync step 3/7: Preparing for validation (kernel position)"
+            else
+                return "Sync step 3/7: Preparing chain state for validation"
+        case "txhashset_rangeproofs_validation":
+            return "Sync step 4/7: Validating chain state - range proofs"
+        case "txhashset_kernels_validation":
+            return "Sync step 5/7: Validating chain state - kernels"
+        case "txhashset_save":
+        case "TxHashsetSave":
+            return "Sync step 6/7: Finalizing chain state for state sync"
+        case "txhashset_done":
+        case "TxHashsetDone":
+            return "Sync step 6/7: Finalized chain state for state sync"
+        case "body_sync":
+            return "Sync step 7/7: Downloading blocks"
+        case "shutdown":
+        case "Shutdown":
+            return "Shutting down, closing connections"
+        default:
+            // Fallback: Rohstatus anzeigen, falls unbekannt
+            return _syncStatus
+        }
+    }
 
     ColumnLayout {
         anchors.top: parent.top
@@ -33,11 +244,10 @@ Rectangle {
         anchors.margins: 16
         spacing: 12
 
-        // Header mit Titel und Uhrzeit nebeneinander
+        // Header
         RowLayout {
             Layout.fillWidth: true
             spacing: 8
-
             Label {
                 text: "Node Status"
                 font.pixelSize: 20
@@ -45,9 +255,7 @@ Rectangle {
                 color: "#ffffff"
                 Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
             }
-
-            Item { Layout.fillWidth: true } // Platzhalter
-
+            Item { Layout.fillWidth: true }
             Label {
                 text: lastUpdated !== "" ? "Last Update: " + lastUpdated : ""
                 font.pixelSize: 14
@@ -56,13 +264,9 @@ Rectangle {
             }
         }
 
-        Rectangle {
-            height: 1
-            color: "#555555"
-            Layout.fillWidth: true
-        }
+        Rectangle { height: 1; color: "#555"; Layout.fillWidth: true }
 
-        // Zwei Spalten nebeneinander
+        // Zwei Spalten
         RowLayout {
             Layout.fillWidth: true
             spacing: 40
@@ -72,29 +276,168 @@ Rectangle {
                 spacing: 6
 
                 RowLayout {
-                    Label { text: "Chain:"; font.bold: true; color: "#dddddd"; Layout.preferredWidth: 130 }
-                    Label { text: currentStatus ? currentStatus.chain : ""; color: "white"; Layout.fillWidth: true }
+                    Label { text: "Chain:"; font.bold: true; color: "#ddd"; Layout.preferredWidth: 130 }
+                    Label { text: currentStatus ? (currentStatus.chain || "") : ""; color: "white"; Layout.fillWidth: true }
                 }
                 RowLayout {
-                    Label { text: "Protocol Version:"; font.bold: true; color: "#dddddd"; Layout.preferredWidth: 130 }
-                    Label { text: currentStatus ? currentStatus.protocolVersion : ""; color: "white"; Layout.fillWidth: true }
+                    Label { text: "Protocol Version:"; font.bold: true; color: "#ddd"; Layout.preferredWidth: 130 }
+                    Label { text: currentStatus ? String(currentStatus.protocolVersion || currentStatus.protocol_version || "") : ""; color: "white"; Layout.fillWidth: true }
                 }
                 RowLayout {
-                    Label { text: "User Agent:"; font.bold: true; color: "#dddddd"; Layout.preferredWidth: 130 }
+                    Label { text: "User Agent:"; font.bold: true; color: "#ddd"; Layout.preferredWidth: 130 }
                     Label {
-                        text: currentStatus ? currentStatus.userAgent : ""
-                        color: "white"
-                        Layout.fillWidth: true
-                        elide: Text.ElideRight
+                        text: currentStatus ? (currentStatus.userAgent || currentStatus.user_agent || "") : ""
+                        color: "white"; Layout.fillWidth: true; elide: Text.ElideRight
                     }
                 }
                 RowLayout {
-                    Label { text: "Sync Status:"; font.bold: true; color: "#dddddd"; Layout.preferredWidth: 130 }
-                    Label { text: currentStatus ? currentStatus.syncStatus : ""; color: "white"; Layout.fillWidth: true }
+                    Label { text: "Sync Status:"; font.bold: true; color: "#ddd"; Layout.preferredWidth: 130 }
+                    Label {
+                        text: currentStatus ? _syncStatusDisplay : ""
+                        color: "white"
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                    }
+                }
+
+                // --- header_sync (Info) ---
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    visible: _showHeaderSync
+                    Label { text: "Sync Info:"; font.bold: true; color: "#ddd"; Layout.preferredWidth: 130 }
+                    RowLayout {
+                        Layout.fillWidth: true; spacing: 10
+                        Label { text: _hdrPct; color: "white"; font.pixelSize: 16; font.bold: true }
+                        Label { text: "(" + String(_hdrCur) + " / " + String(_hdrMax) + ")"; color: "#999"; font.pixelSize: 12 }
+                    }
+                }
+
+                // --- PIBD (Info) ---
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    visible: _showPibd
+                    Label { text: "Sync Info:"; font.bold: true; color: "#ddd"; Layout.preferredWidth: 130 }
+                    RowLayout {
+                        Layout.fillWidth: true; spacing: 10
+                        Label { text: _pibdPct; color: "white"; font.pixelSize: 16; font.bold: true }
+                        Label { text: "(" + String(_pibdDone) + " / " + String(_pibdTotal) + ")"; color: "#999"; font.pixelSize: 12 }
+                    }
+                }
+
+                // --- txhashset_download (Info) ---
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    visible: _showTxdlActive && _txdlHasTotal
+                    Label { text: "Sync Info:"; font.bold: true; color: "#ddd"; Layout.preferredWidth: 130 }
+                    ColumnLayout {
+                        spacing: 2
+                        RowLayout {
+                            spacing: 10
+                            Label { text: _txdlPct; color: "white"; font.pixelSize: 16; font.bold: true }
+                            Label {
+                                text: "(" + bytesToMB(_txdlDone) + " / " + bytesToMB(_txdlTotal) + " MB)"
+                                color: "#999"; font.pixelSize: 12
+                            }
+                        }
+                        Label {
+                            text: "Downloading chain state: " + _txdlPct + " at " + _txdlSpeedText + " (kB/s)"
+                            color: "#bbb"; font.pixelSize: 12
+                        }
+                    }
                 }
                 RowLayout {
-                    Label { text: "Sync Info:"; font.bold: true; color: "#dddddd"; Layout.preferredWidth: 130 }
-                    Label { text: currentStatus ? currentStatus.syncInfo.jsonString : ""; color: "white"; Layout.fillWidth: true }
+                    Layout.fillWidth: true
+                    spacing: 8
+                    visible: _showTxdlActive && !_txdlHasTotal
+                    Label { text: "Sync Info:"; font.bold: true; color: "#ddd"; Layout.preferredWidth: 130 }
+                    Label {
+                        text: "Downloading chain state for state sync. Waiting remote peer to start: " + _txdlWaitingSecs + "s"
+                        color: "#bbb"; font.pixelSize: 12
+                        Layout.fillWidth: true
+                    }
+                }
+
+                // --- txhashset_setup (Info) ---
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    visible: _showSetup
+                    Label { text: "Sync Info:"; font.bold: true; color: "#ddd"; Layout.preferredWidth: 130 }
+                    Label {
+                        text: "Sync step 3/7: " + (
+                              _setupHasHeaders
+                            ? "Preparing for validation (kernel history)"
+                            : _setupHasKernelPos
+                                ? "Preparing for validation (kernel position)"
+                                : "Preparing chain state for validation"
+                          )
+                        color: "#bbb"; font.pixelSize: 12
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                    }
+                }
+
+                // --- rangeproofs (Info) ---
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    visible: _showRangeProofs
+                    Label { text: "Sync Info:"; font.bold: true; color: "#ddd"; Layout.preferredWidth: 130 }
+                    RowLayout {
+                        spacing: 8
+                        Label {
+                            text: "Sync step 4/7: Validating chain state - range proofs: " + _rpPct
+                            color: "#bbb"; font.pixelSize: 12
+                        }
+                        Label {
+                            visible: isFinite(Number(_rpTotal)) && Number(_rpTotal) > 0
+                            text: "(" + String(_rpCount) + " / " + String(_rpTotal) + ")"
+                            color: "#999"; font.pixelSize: 12
+                        }
+                    }
+                }
+
+                // --- kernels (Info) ---
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    visible: _showKernels
+                    Label { text: "Sync Info:"; font.bold: true; color: "#ddd"; Layout.preferredWidth: 130 }
+                    RowLayout {
+                        spacing: 8
+                        Label {
+                            text: "Sync step 5/7: Validating chain state - kernels: " + _kvPct
+                            color: "#bbb"; font.pixelSize: 12
+                        }
+                        Label {
+                            visible: isFinite(Number(_kvTotal)) && Number(_kvTotal) > 0
+                            text: "(" + String(_kvCount) + " / " + String(_kvTotal) + ")"
+                            color: "#999"; font.pixelSize: 12
+                        }
+                    }
+                }
+
+                // --- body_sync (Info) ---
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    visible: _showBody
+                    Label { text: "Sync Info:"; font.bold: true; color: "#ddd"; Layout.preferredWidth: 130 }
+                    RowLayout {
+                        Layout.fillWidth: true; spacing: 10
+                        Label {
+                            text: "Sync step 7/7: Downloading blocks: " + _bodyPct
+                            color: "#bbb"; font.pixelSize: 12
+                        }
+                        Label {
+                            visible: isFinite(Number(_bodyMax)) && Number(_bodyMax) > 0
+                            text: "(" + String(_bodyCur) + " / " + String(_bodyMax) + ")"
+                            color: "#999"; font.pixelSize: 12
+                        }
+                    }
                 }
             }
 
@@ -103,42 +446,41 @@ Rectangle {
                 spacing: 6
 
                 RowLayout {
-                    Label { text: "Connections:"; font.bold: true; color: "#dddddd"; Layout.preferredWidth: 130 }
-                    Label { text: currentStatus ? currentStatus.connections : ""; color: "white"; Layout.fillWidth: true }
+                    Label { text: "Connections:"; font.bold: true; color: "#ddd"; Layout.preferredWidth: 130 }
+                    Label { text: currentStatus ? String(currentStatus.connections || 0) : ""; color: "white"; Layout.fillWidth: true }
                 }
-
                 RowLayout {
-                    Label { text: "Height:"; font.bold: true; color: "#dddddd"; Layout.preferredWidth: 130 }
+                    Label { text: "Height:"; font.bold: true; color: "#ddd"; Layout.preferredWidth: 130 }
                     Label {
-                        text: currentStatus && currentStatus.tip ? currentStatus.tip.height : ""
-                        color: "white"
-                        Layout.fillWidth: true
+                        text: currentStatus && currentStatus.tip ? String(currentStatus.tip.height || 0) : ""
+                        color: "white"; Layout.fillWidth: true
                     }
                 }
                 RowLayout {
-                    Label { text: "Last Block:"; font.bold: true; color: "#dddddd"; Layout.preferredWidth: 130 }
+                    Label { text: "Last Block:"; font.bold: true; color: "#ddd"; Layout.preferredWidth: 130 }
                     Label {
-                        text: currentStatus && currentStatus.tip ? currentStatus.tip.lastBlockPushed : ""
-                        color: "white"
-                        Layout.fillWidth: true
-                        elide: Text.ElideRight
+                        text: currentStatus && currentStatus.tip
+                              ? (currentStatus.tip.lastBlockPushed || currentStatus.tip.last_block_pushed || "")
+                              : ""
+                        color: "white"; Layout.fillWidth: true; elide: Text.ElideRight
                     }
                 }
                 RowLayout {
-                    Label { text: "Prev Block:"; font.bold: true; color: "#dddddd"; Layout.preferredWidth: 130 }
+                    Label { text: "Prev Block:"; font.bold: true; color: "#ddd"; Layout.preferredWidth: 130 }
                     Label {
-                        text: currentStatus && currentStatus.tip ? currentStatus.tip.prevBlockToLast : ""
-                        color: "white"
-                        Layout.fillWidth: true
-                        elide: Text.ElideRight
+                        text: currentStatus && currentStatus.tip
+                              ? (currentStatus.tip.prevBlockToLast || currentStatus.tip.prev_block_to_last || "")
+                              : ""
+                        color: "white"; Layout.fillWidth: true; elide: Text.ElideRight
                     }
                 }
                 RowLayout {
-                    Label { text: "Total Difficulty:"; font.bold: true; color: "#dddddd"; Layout.preferredWidth: 130 }
+                    Label { text: "Total Difficulty:"; font.bold: true; color: "#ddd"; Layout.preferredWidth: 130 }
                     Label {
-                        text: currentStatus && currentStatus.tip ? currentStatus.tip.totalDifficulty : ""
-                        color: "white"
-                        Layout.fillWidth: true
+                        text: currentStatus && currentStatus.tip
+                              ? String(currentStatus.tip.totalDifficulty || currentStatus.tip.total_difficulty || "")
+                              : ""
+                        color: "white"; Layout.fillWidth: true
                     }
                 }
             }
@@ -150,7 +492,6 @@ Rectangle {
         target: nodeOwnerApi
         function onStatusUpdated(statusObj) {
             root.currentStatus = statusObj
-            // Uhrzeit setzen
             var now = new Date()
             var h = now.getHours().toString().padStart(2, "0")
             var m = now.getMinutes().toString().padStart(2, "0")

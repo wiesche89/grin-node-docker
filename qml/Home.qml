@@ -29,8 +29,8 @@ Item {
         password: ""
 
         onNodeStarted: (kind) => {
-                nodeState = (kind === GrinNodeManager.Rust) ? "rust" : "grinpp";
-                bootTimer.restart();           // deine 10s Wartezeit
+            nodeState = (kind === GrinNodeManager.Rust) ? "rust" : "grinpp";
+            bootTimer.restart();           // deine 10s Wartezeit
         }
         onNodeRestarted: (kind) => {
             nodeState = (kind === GrinNodeManager.Rust) ? "rust" : "grinpp";
@@ -44,12 +44,14 @@ Item {
             }
         }
         onErrorOccurred: (msg) => {
-            // Wenn im Startvorgang etwas schief ging → wieder freigeben
             if (nodeState === "rustStarting" || nodeState === "grinppStarting")
                 nodeState = "none";
         }
 
-        onLastResponseChanged: responseField.text = mgr.lastResponse
+        onLastResponseChanged: {
+            // Nur noch die Rohantwort anzeigen; keine Sync-Berechnung mehr hier.
+            responseField.text = mgr.lastResponse
+        }
     }
 
     // ---------------------------------------------
@@ -118,6 +120,8 @@ Item {
             }
             Item { Layout.fillWidth: true }
         }
+
+        // (Hinweis: Die frühere Header-Sync-UI wurde entfernt)
 
         // BUTTONS + RESPONSE
         ColumnLayout {

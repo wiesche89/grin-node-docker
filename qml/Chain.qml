@@ -7,154 +7,123 @@ Item {
     Layout.fillWidth: true
     Layout.fillHeight: true
 
-    // ---------------------------
-    // C++ instance (NodeForeignApi*)
-    // ---------------------------
-    property var nodeForeignApi
+    // ---------- API-Handle wie in deiner funktionierenden Datei ----------
+    readonly property var foreignApi: nodeForeignApi
 
-    // ---------------------------
-    // Settings
-    // ---------------------------
-    property bool useDummyData: true
+    // ---------- Settings ----------
     property int lastCount: 100
 
-    // ---------------------------
-    // Chain state
-    // ---------------------------
-    property int tipHeight: 0
-    property string tipHash: ""
-    property var blocks: []            // oldest → newest for left→right
-    property string heightInput: ""    // search box
+    // ---------- Chain state ----------
+    property var blocks: []            // oldest → newest
+    property string heightInput: ""
+    property var tip: ({ height: 0, lastBlockPushed: "", prevBlockToLast: "", totalDifficulty: 0 })
 
-    // ---------------------------
-    // Inline details (always visible)
-    // ---------------------------
-    property int detailsHeight: -1     // currently selected block height
-    property var hdrData: null
-    property var kernelData: null
-    property var outputsData: []
+    // ---------- Details ----------
+    property int   detailsHeight: -1
+    property var   hdrData: null
+    property var   kernelData: null
+    property var   outputsData: []
 
+    // ---------- Scroll helper ----------
     property bool _wantScrollRight: false
-
-    // --- auto-scroll helper (scroll to far right when blocks update)
-    Timer {
-        id: scrollRightAfterLayout
-        interval: 0
-        repeat: false
-        onTriggered: {
-            if (flick && flick.contentWidth > 0) {
-                flick.contentX = Math.max(0, flick.contentWidth - flick.width)
-            }
-        }
-    }
-
     function requestScrollRight() {
         _wantScrollRight = true
-        // try once immediately; if layout not ready yet, the Flickable hooks below will retry
         if (flick && flick.contentWidth > 0)
             flick.contentX = Math.max(0, flick.contentWidth - flick.width)
     }
 
-    // ===========================
-    // Dummy data
-    // ===========================
-    function seedDummyChain(count) {
-        tipHeight = 456789
-        tipHash = "9f7e1a22cafec0de1234beef7654abcd"
-
-        var arr = []
-        for (var i = 0; i < count; ++i) {
-            var h = tipHeight - (count - 1 - i) // oldest → newest
-            var txs = Math.floor(Math.random()*6)
-            var o = Math.floor(2 + Math.random()*8)
-            var k = Math.floor(1 + Math.random()*3)
-            var ts = Date.now()/1000 - (count - 1 - i)*60
-            var hash = (Math.random().toString(16).slice(2,10)
-                      + Math.random().toString(16).slice(2,10)
-                      + Math.random().toString(16).slice(2,10)).slice(0,64)
-            arr.push({
-                height: h,
-                hash: hash,
-                timestamp: ts,
-                txs: txs,
-                outputs: o,
-                kernels: k,
-                difficulty: Math.floor(100000 + Math.random()*500000)
-            })
+    // ---------- Mapping helpers ----------
+    function toTip(obj) {
+        if (!obj) return { height: 0, lastBlockPushed: "", prevBlockToLast: "", totalDifficulty: 0 }
+        function pick(o, keys) {
+            for (var i=0;i<keys.length;i++) {
+                var k=keys[i]; if (o.hasOwnProperty(k) && o[k]!==undefined && o[k]!==null) return o[k]
+                var lc=k.toLowerCase()
+                for (var p in o) if (String(p).toLowerCase()===lc && o[p]!==undefined && o[p]!==null) return o[p]
+            }
+            return undefined
         }
-        blocks = arr
-        // pick newest block for details
-        detailsHeight = (blocks.length > 0) ? blocks[blocks.length-1].height : -1
-        if (detailsHeight >= 0) {
-            seedDummyHeader(detailsHeight)
-            seedDummyKernel()
-            seedDummyOutputs(Math.floor(3 + Math.random()*6))
-        }
-        requestScrollRight()
+        var h  = obj.height;            if (h  === undefined) h  = pick(obj, ["height"])
+        var lb = obj.lastBlockPushed;   if (lb === undefined) lb = pick(obj, ["lastBlockPushed","last_block_pushed","last_block_h"])
+        var pv = obj.prevBlockToLast;   if (pv === undefined) pv = pick(obj, ["prevBlockToLast","prev_block_to_last","prev_block_h"])
+        var td = obj.totalDifficulty;   if (td === undefined) td = pick(obj, ["totalDifficulty","total_difficulty"])
+        return { height: Number(h||0), lastBlockPushed: String(lb||""), prevBlockToLast: String(pv||""), totalDifficulty: Number(td||0) }
     }
 
-    function seedDummyHeader(h) {
-        hdrData = {
-            height: h,
-            hash: (Math.random().toString(16).slice(2) + Math.random().toString(16).slice(2)).slice(0,64),
-            previous: (Math.random().toString(16).slice(2) + Math.random().toString(16).slice(2)).slice(0,64),
-            timestamp: Date.now()/1000,
-            total_difficulty: Math.floor(1e8 + Math.random()*1e8),
-            kernel_root: Math.random().toString(16).slice(2, 66),
-            output_root: Math.random().toString(16).slice(2, 66)
-        }
-    }
-    function seedDummyKernel() {
-        kernelData = {
-            excess: Math.random().toString(16).slice(2, 66),
-            excess_sig: Math.random().toString(16).slice(2, 130),
-            fee: Math.floor(Math.random()*2e8),
-            lock_height: 0,
-            height: detailsHeight
-        }
-    }
-    function seedDummyOutputs(n) {
-        var out = []
-        for (var i = 0; i < n; ++i) {
-            out.push({
-                commitment: Math.random().toString(16).slice(2, 66),
-                features: (Math.random() < 0.2) ? "Coinbase" : "Plain",
-                proof: (Math.random() < 0.3) ? "(range proof …)" : "",
-                height: detailsHeight
-            })
-        }
-        outputsData = out
-    }
-
-    // ===========================
-    // Mapping (real API → light JS)
-    // ===========================
     function mapBlockPrintable(b) {
         if (!b) return null
         var hdr = b.header || b.block_header || b
+
+        // Liefert die Länge, wenn x Array-ähnlich ist, sonst 0
+        function countLike(x) {
+            if (x === undefined || x === null) return 0
+            // QML/Qt kann QVariantList/JS-Array liefern
+            if (Array.isArray(x)) return x.length
+            // Manche Qt-Container exposen 'length' als Property
+            if (typeof x === "object" && "length" in x && typeof x.length === "number")
+                return x.length
+            return 0
+        }
+        // Zahl extrahieren, falls schon numerisch vorhanden
+        function num(x) { return (typeof x === "number" && isFinite(x)) ? x : 0 }
+
+        // Zähler defensiv bestimmen:
+        var txs     = num(b.num_txs)     || num(b.txs)     || countLike(b.txs)     || 0
+        var outputs = num(b.outputs)     || num(b.num_outputs) || countLike(b.outputs) || countLike(b.outputsVariant) || 0
+        var kernels = num(b.kernels)     || num(b.num_kernels) || countLike(b.kernels) || countLike(b.kernelsVariant) || 0
+
+        // Header-Felder defensiv lesen
+        var height     = Number(hdr.height || b.height || 0)
+        var hash       = (hdr.hash || hdr.prev_root || b.hash || "")
+        var timestamp  = Number(hdr.timestamp || hdr.time || 0)
+        var difficulty = Number(hdr.total_difficulty || hdr.difficulty || 0)
+
         return {
-            height: Number(hdr.height || b.height || 0),
-            hash:   (hdr.hash || hdr.prev_root || b.hash || ""),
-            timestamp: Number(hdr.timestamp || hdr.time || 0),
-            txs: Number((b.txs && b.txs.length) || b.num_txs || 0),
-            outputs: Number(b.outputs || 0),
-            kernels: Number(b.kernels || 0),
-            difficulty: Number(hdr.total_difficulty || hdr.difficulty || 0)
+            height: height,
+            hash: hash,
+            timestamp: timestamp,
+            txs: txs,
+            outputs: outputs,
+            kernels: kernels,
+            difficulty: difficulty
         }
     }
+
+
     function mapHeaderPrintable(h) {
-        var hdr = h || {}
-        var hh = hdr.header || hdr.block_header || hdr
+        var hh = (h && (h.header || h.block_header || h)) || {}
+
+        function toTs(x) {
+            if (typeof x === "number" && isFinite(x)) return x
+            if (typeof x === "string" && x.length) {
+                var n = Number(x); if (isFinite(n)) return n
+                var ms = Date.parse(x); if (!isNaN(ms)) return Math.floor(ms/1000)
+            }
+            return 0
+        }
+        function toNum(x) { return (typeof x === "number" && isFinite(x)) ? x
+                                   : (typeof x === "string" && isFinite(Number(x)) ? Number(x) : 0) }
+
+        // WICHTIG: Nur dot-Access verwenden (GADGET!)
+        var height = toNum(hh.height)
+        var hash   = hh.hash || ""
+        var prev   = hh.previous || hh.prevRoot || ""
+        var ts     = toTs(hh.timestamp)          // QString (ISO) oder Zahl
+        var td     = toNum(hh.totalDifficulty)   // camelCase in deinem Header
+        var kroot  = hh.kernelRoot || ""
+        var oroot  = hh.outputRoot || ""
+
         return {
-            height: Number(hh.height || 0),
-            hash:   (hh.hash || ""),
-            previous: (hh.previous || hh.prev_root || ""),
-            timestamp: Number(hh.timestamp || 0),
-            total_difficulty: Number(hh.total_difficulty || 0),
-            kernel_root: (hh.kernel_root || ""),
-            output_root: (hh.output_root || "")
+            height: height,
+            hash: hash,
+            previous: prev,
+            timestamp: ts,
+            total_difficulty: td,
+            kernel_root: kroot,
+            output_root: oroot
         }
     }
+
     function mapOutputPrintableList(list) {
         var out = []
         if (!list || !list.length) return out
@@ -171,141 +140,150 @@ Item {
     }
     function mapLocatedTxKernel(k) {
         var kk = k || {}
-        var kern = kk.tx_kernel || kk.kernel || kk
+        var kern = kk.tx_kernel || kk.kernel || kk || {}
         return {
-            excess: kern.excess || "",
-            excess_sig: kern.excess_sig || "",
+            excess: (kern.excess || ""),
+            excess_sig: (kern.excess_sig || ""),
             fee: Number(kern.fee || 0),
             lock_height: Number(kern.lock_height || 0),
             height: Number(kk.height || 0)
         }
     }
+
     function mapBlockListing(listing) {
-        var arrSrc = listing && (listing.blocks || listing.items || listing)
+        var arrSrc = (listing && (listing.blocksVariant || listing.blocks || listing.items || listing)) || []
         var out = []
-        if (!arrSrc || !arrSrc.length) return out
         for (var i = 0; i < arrSrc.length; ++i)
             out.push(mapBlockPrintable(arrSrc[i]))
-        // oldest → newest for left→right
         out.sort(function(a,b){ return a.height - b.height })
         return out
     }
 
-    // ===========================
-    // Data loading
-    // ===========================
-    function loadLatest() {
-        if (useDummyData) { seedDummyChain(lastCount); return }
-        if (!nodeForeignApi) return
-        if (typeof nodeForeignApi.getTipAsync === "function") {
-            nodeForeignApi.getTipAsync()
-        } else {
-            nodeForeignApi.getBlocksAsync(0, 0, lastCount, false)
-        }
-    }
 
-    function loadFromTip(tipH) {
-        if (!nodeForeignApi) return
-        var start = Math.max(0, tipH - (lastCount - 1))
-        var end   = tipH
-        nodeForeignApi.getBlocksAsync(start, end, lastCount, false)
+    // ---------- API calls ----------
+    function refreshTip() {
+        if (!foreignApi) { status.showError("Foreign API nicht gesetzt."); return }
+        try { foreignApi.getTipAsync() } catch(e) { status.showError("getTipAsync: " + e) }
     }
-
+    function loadBlocksForTip(h) {
+        if (!foreignApi) return
+        var start = Math.max(0, h - (lastCount - 1))
+        try { foreignApi.getBlocksAsync(start, h, lastCount, false) } catch(e) { status.showError("getBlocksAsync: " + e) }
+    }
     function selectNewestForDetails() {
         if (blocks.length === 0) { detailsHeight = -1; return }
         detailsHeight = blocks[blocks.length - 1].height
-        if (useDummyData) {
-            seedDummyHeader(detailsHeight)
-            seedDummyKernel()
-            seedDummyOutputs(Math.floor(3 + Math.random()*6))
-        } else if (nodeForeignApi) {
+        if (foreignApi && detailsHeight >= 0) {
             hdrData = null; kernelData = null; outputsData = []
-            nodeForeignApi.getHeaderAsync(detailsHeight, "", "")
+            Qt.callLater(function(){ try { foreignApi.getHeaderAsync(detailsHeight, "", "") } catch(e) { status.showError("getHeaderAsync: " + e) } })
+        }
+    }
+    function openDetails(h) {
+        var hh = Number(h)            // <— Zahl erzwingen
+        if (!isFinite(hh) || hh < 0) {
+            status.showError("Ungültige Block-Höhe")
+            return
+        }
+        detailsHeight = hh
+        if (foreignApi) {
+            hdrData = null; kernelData = null; outputsData = []
+            try {
+                foreignApi.getHeaderAsync(hh, "", "")
+                console.log("[QML] getHeaderAsync(", hh, ")")
+            } catch(e) {
+                status.showError("getHeaderAsync: " + e)
+            }
         }
     }
 
-    function openDetails(height) {
-        detailsHeight = height
-        if (useDummyData) {
-            seedDummyHeader(height)
-            seedDummyKernel()
-            seedDummyOutputs(Math.floor(3 + Math.random()*6))
-        } else if (nodeForeignApi) {
-            hdrData = null; kernelData = null; outputsData = []
-            nodeForeignApi.getHeaderAsync(height, "", "")
-        }
-    }
+    // ---------- Lifecycle ----------
+    Component.onCompleted: refreshTip()
+    onForeignApiChanged: if (foreignApi) refreshTip()
 
-    // ===========================
-    // Lifecycle / connections
-    // ===========================
-    Component.onCompleted: loadLatest()
-    onNodeForeignApiChanged: { if (!useDummyData && nodeForeignApi) loadLatest() }
-
+    // ---------- Signals (nur „Updated“-Signale nutzen) ----------
     Connections {
-        target: (useDummyData ? null : nodeForeignApi)
+        target: (typeof foreignApi === "object" && foreignApi) ? foreignApi : null
         ignoreUnknownSignals: true
 
-        function onTipUpdated(tipObj) {
-            tipHeight = Number(tipObj.height || 0)
-            tipHash = tipObj.last_block_pushed || tipObj.last_block_h || ""
-            if (tipHeight > 0) loadFromTip(tipHeight)
+        // genau wie in deiner funktionierenden Datei
+        function onTipUpdated(payload) {
+            tip = toTip(payload)
+
+            if (tip.height > 0) {
+                // erst dann Blöcke holen (entkoppelt)
+                Qt.callLater(function(){ loadBlocksForTip(tip.height) })
+            } else {
+                // Keine Folge-Calls bei leerem Tip
+                blocks = []
+                detailsHeight = -1
+                hdrData = null; kernelData = null; outputsData = []
+            }
         }
-        function onGetBlocksFinished(r) {
-            if (r.hasError && r.hasError()) {
-                status.showError(r.errorString ? r.errorString() : "getBlocks failed")
+
+        // NEU: QML-fertige Liste
+        function onBlocksUpdated(list, lastHeight) {
+            // mapBlockListing akzeptiert ein Objekt mit blocksVariant
+            var arr = mapBlockListing({ blocksVariant: list })
+            if (!arr || arr.length === 0) {
+                blocks = []
+                detailsHeight = -1
+                hdrData = null; kernelData = null; outputsData = []
+                status.show("Keine Blöcke empfangen")
                 return
             }
-            var v = r.value ? r.value() : r.value
-            blocks = mapBlockListing(v)
+            blocks = arr
             requestScrollRight()
             selectNewestForDetails()
         }
-        function onGetHeaderFinished(r) {
-            if (r.hasError && r.hasError()) {
-                status.showError(r.errorString ? r.errorString() : "getHeader failed")
-                return
+
+        function onHeaderUpdated(hdr) {
+            // Dot-Access – jetzt sicher
+            var ts = (typeof hdr.timestamp === "number") ? hdr.timestamp
+                     : (typeof hdr.timestamp === "string" ? Math.floor(Date.parse(hdr.timestamp)/1000) : 0)
+
+            hdrData = {
+                height: Number(hdr.height || 0),
+                hash:   String(hdr.hash || ""),
+                previous: String(hdr.previous || hdr.prevRoot || ""),
+                timestamp: Number(ts || 0),
+                total_difficulty: Number(hdr.totalDifficulty || 0),
+                kernel_root: String(hdr.kernelRoot || ""),
+                output_root: String(hdr.outputRoot || "")
             }
-            var v = r.value ? r.value() : r.value
-            hdrData = mapHeaderPrintable(v)
+
+            console.log("[QML] header h/hash/ts/td =",
+                        hdrData.height, hdrData.hash, hdrData.timestamp, hdrData.total_difficulty)
         }
+
+
+
         function onGetKernelFinished(r) {
-            if (r.hasError && r.hasError()) {
-                status.showError(r.errorString ? r.errorString() : "getKernel failed")
-                return
+            if (r && typeof r.hasError === "function" && r.hasError()) {
+                status.showError(typeof r.errorString === "function" ? r.errorString() : "getKernel failed"); return
             }
-            var v = r.value ? r.value() : r.value
+            var v = (r && typeof r.value === "function") ? r.value() : (r && r.value)
             kernelData = mapLocatedTxKernel(v)
         }
+
         function onGetOutputsFinished(r) {
-            if (r.hasError && r.hasError()) {
-                status.showError(r.errorString ? r.errorString() : "getOutputs failed")
-                return
+            if (r && typeof r.hasError === "function" && r.hasError()) {
+                status.showError(typeof r.errorString === "function" ? r.errorString() : "getOutputs failed"); return
             }
-            var v = r.value ? r.value() : r.value
+            var v = (r && typeof r.value === "function") ? r.value() : (r && r.value)
             outputsData = mapOutputPrintableList(v)
         }
     }
 
-    // ===========================
-    // UI
-    // ===========================
+    // ---------- UI ----------
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: 20
         spacing: 20
 
-        // Header row
         RowLayout {
             Layout.fillWidth: true
             spacing: 12
-
-            Label {
-                text: "Chain"
-                color: "white"
-                font.pixelSize: 28
-                font.bold: true
-            }
+            Label { text: "Chain"; color: "white"; font.pixelSize: 28; font.bold: true }
 
             Rectangle {
                 Layout.preferredWidth: 520
@@ -314,12 +292,12 @@ Item {
                 color: "#161616"
                 border.color: "#2a2a2a"
                 Row {
-                    anchors.fill: parent
-                    anchors.margins: 10
-                    spacing: 14
+                    anchors.fill: parent; anchors.margins: 10; spacing: 14
                     Label { text: "Tip:"; color: "#bbbbbb" }
                     Label {
-                        text: tipHeight > 0 ? (tipHeight + " • " + (tipHash.length ? tipHash.substr(0, 8) + "…" : "—")) : "—"
+                        text: tip.height > 0
+                              ? (tip.height + " • " + (tip.lastBlockPushed && tip.lastBlockPushed.length ? tip.lastBlockPushed.substr(0,10) + "…" : "—"))
+                              : "—"
                         color: "white"; font.bold: true
                     }
                     Rectangle { width: 1; height: parent.height * 0.7; color: "#333" }
@@ -329,23 +307,6 @@ Item {
             }
 
             Item { Layout.fillWidth: true }
-
-            CheckBox {
-                id: dummyToggle
-                text: "Dummy"
-                checked: useDummyData
-                onToggled: {
-                    useDummyData = checked
-                    loadLatest()
-                }
-                indicator: Rectangle {
-                    implicitWidth: 18; implicitHeight: 18; radius: 3
-                    color: control.checked ? "#3a6df0" : "#2b2b2b"
-                    border.color: "#555"
-                }
-                contentItem: Text { text: control.text; color: "#ddd"; verticalAlignment: Text.AlignVCenter }
-                background: null
-            }
 
             DarkTextField {
                 id: heightField
@@ -361,23 +322,18 @@ Item {
                 enabled: heightField.acceptableInput && heightField.text.length>0
                 onClicked: {
                     var h = parseInt(heightField.text)
-                    if (!isNaN(h)) openDetails(h)
+                    if (!isNaN(h) && h >= 0) openDetails(h)
                 }
             }
-
-            DarkButton {
-                text: "Refresh"
-                onClicked: loadLatest()
-            }
+            DarkButton { text: "Refresh"; onClicked: refreshTip() }
         }
 
         Label {
             Layout.fillWidth: true
-            text: "Last " + lastCount + " blocks (left → right). Click a block to show its details below."
+            text: "Letzte " + lastCount + " Blöcke (links → rechts). Klicke einen Block für Details."
             color: "#bbbbbb"
         }
 
-        // Blockchain view: left-to-right with connectors
         Frame {
             Layout.fillWidth: true
             Layout.preferredHeight: 170
@@ -394,10 +350,8 @@ Item {
                 contentWidth: Math.max(chainRow.implicitWidth, width)
                 contentHeight: height
 
-                // Re-try after geometry changes
                 onContentWidthChanged: _applyScrollRight()
                 onWidthChanged: _applyScrollRight()
-
                 function _applyScrollRight() {
                     if (_wantScrollRight && contentWidth > 0) {
                         Qt.callLater(function() {
@@ -414,16 +368,19 @@ Item {
                     onImplicitWidthChanged: flick._applyScrollRight()
 
                     Repeater {
-                        id: rep
                         model: Array.isArray(blocks) ? blocks.length : 0
-
                         delegate: ChainNode {
                             nodeWidth: 220
                             nodeHeight: 120
                             connectorWidth: 48
                             blk: blocks[index]
                             showConnector: index < (blocks.length - 1)
-                            onClickedBlock: openDetails(blk.height)
+                            // im Repeater-Delegate:
+                            onClickedBlock: {
+                                // Debug hilft sofort zu sehen, ob der Klick feuert + welchen Wert wir schicken
+                                console.log("[QML] clicked height =", blk && blk.height)
+                                openDetails(blk && blk.height)
+                            }
                         }
                     }
                 }
@@ -432,7 +389,6 @@ Item {
             }
         }
 
-        // Inline details (always visible)
         Frame {
             Layout.fillWidth: true
             Layout.fillHeight: true
@@ -447,54 +403,40 @@ Item {
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 8
-                    Label { text: "Details for block"; color: "#bbb" }
+                    Label { text: "Details für Block"; color: "#bbb" }
                     Label { text: detailsHeight >= 0 ? ("#" + detailsHeight) : "—"; color: "white"; font.bold: true }
                     Item { Layout.fillWidth: true }
                     DarkButton {
-                        text: useDummyData ? "Reload (dummy header)" : "Reload header"
+                        text: "Header neu laden"
                         onClicked: {
-                            if (detailsHeight < 0) return
-                            if (useDummyData) seedDummyHeader(detailsHeight)
-                            else if (nodeForeignApi) nodeForeignApi.getHeaderAsync(detailsHeight, "", "")
+                            if (detailsHeight >= 0 && foreignApi)
+                                Qt.callLater(function(){ try { foreignApi.getHeaderAsync(detailsHeight, "", "") } catch(e) { status.showError("getHeaderAsync: " + e) } })
                         }
                     }
                 }
 
-                // Tabs without TabView: TabBar + StackLayout
                 TabBar {
                     id: tabsBar
                     Layout.fillWidth: true
                     currentIndex: 0
-
-                    background: Rectangle {
-                        radius: 8
-                        color: "#151515"
-                        border.color: "#2a2a2a"
-                        height: parent.height
-                    }
-
+                    background: Rectangle { radius: 8; color: "#151515"; border.color: "#2a2a2a"; height: parent.height }
                     DarkTabButton { text: "Header" }
                     DarkTabButton { text: "Kernel" }
                     DarkTabButton { text: "Outputs" }
                 }
 
-
                 StackLayout {
-                    id: tabsStack
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     currentIndex: tabsBar.currentIndex
 
-                    // === Header tab ===
                     Item {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         ScrollView {
                             anchors.fill: parent
                             Column {
-                                anchors.fill: parent
-                                anchors.margins: 10
-                                spacing: 6
+                                anchors.fill: parent; anchors.margins: 10; spacing: 6
                                 Label { text: hdrData ? "Hash: " + (hdrData.hash || "—") : "—"; color: "#ddd" }
                                 Label { text: hdrData ? "Previous: " + (hdrData.previous || "—") : ""; color: "#bbb" }
                                 Label { text: hdrData ? "Total difficulty: " + hdrData.total_difficulty : ""; color: "#bbb" }
@@ -505,60 +447,42 @@ Item {
                         }
                     }
 
-                    // === Kernel tab ===
                     Item {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         ColumnLayout {
-                            anchors.fill: parent
-                            anchors.margins: 10
-                            spacing: 8
-
+                            anchors.fill: parent; anchors.margins: 10; spacing: 8
                             RowLayout {
-                                Layout.fillWidth: true
-                                spacing: 8
+                                Layout.fillWidth: true; spacing: 8
+                                DarkTextField { id: excessField; placeholderText: "excess (hex)…"; Layout.fillWidth: true; text: "" }
                                 DarkTextField {
-                                    id: excessField
-                                    placeholderText: "excess (hex)…"
-                                    Layout.fillWidth: true
-                                    text: ""
-                                }
-                                DarkTextField {
-                                    id: minH
-                                    placeholderText: "min height"
+                                    id: minH; placeholderText: "min height"
                                     validator: IntValidator { bottom: 0; top: 2147483647 }
                                     inputMethodHints: Qt.ImhDigitsOnly
                                     text: detailsHeight >= 0 ? String(Math.max(detailsHeight - 100, 0)) : "0"
                                     Layout.preferredWidth: 120
                                 }
                                 DarkTextField {
-                                    id: maxH
-                                    placeholderText: "max height"
+                                    id: maxH; placeholderText: "max height"
                                     validator: IntValidator { bottom: 0; top: 2147483647 }
                                     inputMethodHints: Qt.ImhDigitsOnly
                                     text: detailsHeight >= 0 ? String(detailsHeight) : "0"
                                     Layout.preferredWidth: 120
                                 }
                                 DarkButton {
-                                    text: useDummyData ? "Dummy kernel" : "Load kernel"
+                                    text: "Kernel laden"
                                     onClicked: {
-                                        if (detailsHeight < 0) return
-                                        if (useDummyData) seedDummyKernel()
-                                        else if (nodeForeignApi && excessField.text.length > 0)
-                                            nodeForeignApi.getKernelAsync(excessField.text, parseInt(minH.text||"0"), parseInt(maxH.text||"0"))
+                                        if (detailsHeight < 0 || !foreignApi || !excessField.text.length) return
+                                        Qt.callLater(function(){ try { foreignApi.getKernelAsync(excessField.text, parseInt(minH.text||"0"), parseInt(maxH.text||"0")) } catch(e) { status.showError("getKernelAsync: " + e) } })
                                     }
                                 }
                             }
-
                             Frame {
-                                Layout.fillWidth: true
-                                Layout.fillHeight: true
+                                Layout.fillWidth: true; Layout.fillHeight: true
                                 background: Rectangle { color: "#141414"; radius: 10; border.color: "#2a2a2a" }
                                 padding: 10
-
                                 Column {
-                                    anchors.fill: parent
-                                    spacing: 6
+                                    anchors.fill: parent; spacing: 6
                                     Label { text: kernelData ? "Excess: " + kernelData.excess : "—"; color: "#ddd" }
                                     Label { text: kernelData ? "Excess sig: " + kernelData.excess_sig : ""; color: "#bbb" }
                                     Label { text: kernelData ? "Fee: " + kernelData.fee : ""; color: "#bbb" }
@@ -569,38 +493,30 @@ Item {
                         }
                     }
 
-                    // === Outputs tab ===
                     Item {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         ColumnLayout {
-                            anchors.fill: parent
-                            anchors.margins: 10
-                            spacing: 8
-
+                            anchors.fill: parent; anchors.margins: 10; spacing: 8
                             RowLayout {
-                                Layout.fillWidth: true
-                                spacing: 8
+                                Layout.fillWidth: true; spacing: 8
                                 DarkTextArea {
                                     id: commitsArea
-                                    placeholderText: "commitments (hex), separated by comma"
-                                    Layout.fillWidth: true
-                                    Layout.preferredHeight: 70
+                                    placeholderText: "commitments (hex), getrennt durch Komma/Leerzeichen/Zeilenumbruch"
+                                    Layout.fillWidth: true; Layout.preferredHeight: 70
                                     wrapMode: TextEdit.WrapAnywhere
                                 }
                                 ColumnLayout {
                                     spacing: 6
                                     DarkTextField {
-                                        id: outMinH
-                                        placeholderText: "min height"
+                                        id: outMinH; placeholderText: "min height"
                                         validator: IntValidator { bottom: 0; top: 2147483647 }
                                         inputMethodHints: Qt.ImhDigitsOnly
                                         text: detailsHeight >= 0 ? String(Math.max(detailsHeight - 100, 0)) : "0"
                                         Layout.preferredWidth: 120
                                     }
                                     DarkTextField {
-                                        id: outMaxH
-                                        placeholderText: "max height"
+                                        id: outMaxH; placeholderText: "max height"
                                         validator: IntValidator { bottom: 0; top: 2147483647 }
                                         inputMethodHints: Qt.ImhDigitsOnly
                                         text: detailsHeight >= 0 ? String(detailsHeight) : "0"
@@ -608,54 +524,45 @@ Item {
                                     }
                                     RowLayout {
                                         spacing: 6
-                                        CheckBox { id: includeProof; text: "Proof"; checked: false
-                                            indicator: Rectangle {
-                                                implicitWidth: 18; implicitHeight: 18; radius: 3
-                                                color: control.checked ? "#3a6df0" : "#2b2b2b"
-                                                border.color: "#555"
-                                            }
-                                            contentItem: Text { text: control.text; color: "#ddd"; verticalAlignment: Text.AlignVCenter }
+                                        CheckBox {
+                                            id: includeProof; text: "Proof"; checked: false
+                                            indicator: Rectangle { implicitWidth: 18; implicitHeight: 18; radius: 3; color: includeProof.checked ? "#3a6df0" : "#2b2b2b"; border.color: "#555" }
+                                            contentItem: Text { text: includeProof.text; color: "#ddd"; verticalAlignment: Text.AlignVCenter }
                                             background: null
                                         }
-                                        CheckBox { id: includeMerkle; text: "Merkle"; checked: false
-                                            indicator: Rectangle {
-                                                implicitWidth: 18; implicitHeight: 18; radius: 3
-                                                color: control.checked ? "#3a6df0" : "#2b2b2b"
-                                                border.color: "#555"
-                                            }
-                                            contentItem: Text { text: control.text; color: "#ddd"; verticalAlignment: Text.AlignVCenter }
+                                        CheckBox {
+                                            id: includeMerkle; text: "Merkle"; checked: false
+                                            indicator: Rectangle { implicitWidth: 18; implicitHeight: 18; radius: 3; color: includeMerkle.checked ? "#3a6df0" : "#2b2b2b"; border.color: "#555" }
+                                            contentItem: Text { text: includeMerkle.text; color: "#ddd"; verticalAlignment: Text.AlignVCenter }
                                             background: null
                                         }
                                     }
                                     DarkButton {
-                                        text: useDummyData ? "Dummy outputs" : "Load outputs"
+                                        text: "Outputs laden"
                                         onClicked: {
-                                            if (detailsHeight < 0) return
-                                            if (useDummyData) {
-                                                seedDummyOutputs(6)
-                                            } else if (nodeForeignApi) {
-                                                var commits = []
-                                                var raw = commitsArea.text.split(/[, \n]+/)
-                                                for (var i=0;i<raw.length;i++) {
-                                                    var c = raw[i].trim()
-                                                    if (c.length) commits.push(c)
-                                                }
-                                                nodeForeignApi.getOutputsAsync(
-                                                    commits,
-                                                    parseInt(outMinH.text||"0"),
-                                                    parseInt(outMaxH.text||"0"),
-                                                    includeProof.checked,
-                                                    includeMerkle.checked
-                                                )
+                                            if (detailsHeight < 0 || !foreignApi) return
+                                            var commits = []
+                                            var raw = commitsArea.text.split(/[, \n]+/)
+                                            for (var i=0;i<raw.length;i++) {
+                                                var c = raw[i].trim(); if (c.length) commits.push(c)
                                             }
+                                            Qt.callLater(function(){
+                                                try {
+                                                    foreignApi.getOutputsAsync(
+                                                        commits,
+                                                        parseInt(outMinH.text||"0"),
+                                                        parseInt(outMaxH.text||"0"),
+                                                        includeProof.checked,
+                                                        includeMerkle.checked
+                                                    )
+                                                } catch(e) { status.showError("getOutputsAsync: " + e) }
+                                            })
                                         }
                                     }
                                 }
                             }
-
                             Frame {
-                                Layout.fillWidth: true
-                                Layout.fillHeight: true
+                                Layout.fillWidth: true; Layout.fillHeight: true
                                 background: Rectangle { color: "#141414"; radius: 10; border.color: "#2a2a2a" }
                                 padding: 10
 
@@ -701,272 +608,102 @@ Item {
             }
         }
 
+        // Hinweis solange nichts da ist
+        Label {
+            visible: blocks.length === 0 && tip.height === 0
+            text: "Lade Tip …"
+            color: "#888"
+            horizontalAlignment: Text.AlignHCenter
+            Layout.fillWidth: true
+        }
+
         StatusBar { id: status; Layout.fillWidth: true }
     }
 
-    // ===========================
-    // Components
-    // ===========================
-
-    // --- Your exact custom dark Button style (as given) ---
-    Component {
-        id: darkButtonComponent
-        Button {
-            id: control
-            property color bg: hovered ? "#3a3a3a" : "#2b2b2b"
-            property color fg: enabled ? "white" : "#777"
-            flat: true
-            padding: 10
-
-            background: Rectangle {
-                radius: 6
-                color: control.down ? "#2f2f2f" : control.bg
-                border.color: control.down ? "#66aaff" : "#555"
-                border.width: 1
-            }
-            contentItem: Text {
-                text: control.text
-                color: control.fg
-                font.pixelSize: 14
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
-                elide: Text.ElideRight
-            }
-        }
-    }
-
-
-
-    // Convenience: use as a normal type
+    // ---------- Dark UI bits ----------
     component DarkButton: Button {
         id: control
         property color bg: hovered ? "#3a3a3a" : "#2b2b2b"
         property color fg: enabled ? "white" : "#777"
         flat: true
         padding: 10
-        background: Rectangle {
-            radius: 6
-            color: control.down ? "#2f2f2f" : control.bg
-            border.color: control.down ? "#66aaff" : "#555"
-            border.width: 1
-        }
-        contentItem: Text {
-            text: control.text
-            color: control.fg
-            font.pixelSize: 14
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-            elide: Text.ElideRight
-        }
+        background: Rectangle { radius: 6; color: control.down ? "#2f2f2f" : control.bg; border.color: control.down ? "#66aaff" : "#555"; border.width: 1 }
+        contentItem: Text { text: control.text; color: control.fg; font.pixelSize: 14; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight }
     }
-
-    // TabButton im gleichen Dark-Stil wie DarkButton
-    // TabButton in the same dark style as DarkButton (no 'flat' prop here)
     component DarkTabButton: TabButton {
         id: control
-
-        // colors
         property color bgNormal: hovered ? "#3a3a3a" : "#2b2b2b"
         property color bgChecked: hovered ? "#4a4a4a" : "#3b3b3b"
         property color fg: enabled ? "white" : "#777"
-
-        // sizing
         implicitHeight: 36
         implicitWidth: Math.max(90, contentItem.implicitWidth + 20)
-        padding: 10
-        checkable: true   // keep explicit for clarity
-
-        background: Rectangle {
-            radius: 6
-            color: control.checked
-                   ? (control.down ? "#353535" : control.bgChecked)
-                   : (control.down ? "#2f2f2f" : control.bgNormal)
-            border.color: control.checked ? "#66aaff" : "#555"
-            border.width: 1
-        }
-
-        contentItem: Text {
-            text: control.text
-            color: control.fg
-            font.pixelSize: 14
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-            elide: Text.ElideRight
-        }
+        padding: 10; checkable: true
+        background: Rectangle { radius: 6; color: control.checked ? (control.down ? "#353535" : "#3b3b3b") : (control.down ? "#2f2f2f" : "#2b2b2b"); border.color: control.checked ? "#66aaff" : "#555"; border.width: 1 }
+        contentItem: Text { text: control.text; color: control.fg; font.pixelSize: 14; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight }
     }
-
-
-    // Dark text field / text area to match the button style
     component DarkTextField: TextField {
-        id: tf
-        color: "white"
-        placeholderTextColor: "#777"
-        selectionColor: "#3a6df0"
-        selectedTextColor: "white"
-        background: Rectangle {
-            radius: 6
-            color: "#2b2b2b"
-            border.color: "#555"
-            border.width: 1
-        }
-        padding: 8
-        font.pixelSize: 14
+        color: "white"; placeholderTextColor: "#777"; selectionColor: "#3a6df0"; selectedTextColor: "white"
+        background: Rectangle { radius: 6; color: "#2b2b2b"; border.color: "#555"; border.width: 1 }
+        padding: 8; font.pixelSize: 14
     }
-
     component DarkTextArea: TextArea {
-        id: ta
-        color: "white"
-        placeholderTextColor: "#777"
-        selectionColor: "#3a6df0"
-        selectedTextColor: "white"
-        background: Rectangle {
-            radius: 6
-            color: "#2b2b2b"
-            border.color: "#555"
-            border.width: 1
-        }
-        padding: 8
-        font.pixelSize: 14
+        color: "white"; placeholderTextColor: "#777"; selectionColor: "#3a6df0"; selectedTextColor: "white"
+        background: Rectangle { radius: 6; color: "#2b2b2b"; border.color: "#555"; border.width: 1 }
+        padding: 8; font.pixelSize: 14
     }
-
-    // Chain node (tile + right connector) — click to open details
     component ChainNode: Item {
-        id: node
         property var blk
         property bool showConnector: true
         property int nodeWidth: 220
         property int nodeHeight: 120
         property int connectorWidth: 48
         signal clickedBlock()
-
         width: nodeWidth + (showConnector ? connectorWidth : 0)
         height: nodeHeight
-
-        BlockTile {
-            id: tile
-            anchors.left: parent.left
-            anchors.verticalCenter: parent.verticalCenter
-            width: nodeWidth
-            height: nodeHeight
-            blk: node.blk
-            onClicked: node.clickedBlock()
-        }
-
-        // --- yellow grin-style connector between blocks ---
+        BlockTile { id: tile; anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; width: nodeWidth; height: nodeHeight; blk: parent.blk; onClicked: parent.clickedBlock() }
         Item {
-            anchors.left: tile.right
-            anchors.verticalCenter: tile.verticalCenter
-            width: connectorWidth
-            height: 8
-            visible: showConnector
-
-            // softly glowing bar
-            Rectangle {
-                id: bar
-                anchors.verticalCenter: parent.verticalCenter
-                width: parent.width - 20
-                height: 4
-                radius: 2
-                gradient: Gradient {
-                    GradientStop { position: 0.0; color: "#ffea70" }   // light yellow
-                    GradientStop { position: 1.0; color: "#ffcc33" }   // grin gold
-                }
+            anchors.left: tile.right; anchors.verticalCenter: tile.verticalCenter
+            width: parent.connectorWidth; height: 8; visible: parent.showConnector
+            Rectangle { anchors.verticalCenter: parent.verticalCenter; width: parent.width - 20; height: 4; radius: 2
+                gradient: Gradient { GradientStop { position: 0.0; color: "#ffea70" } GradientStop { position: 1.0; color: "#ffcc33" } }
                 opacity: 0.9
             }
-
-            // arrow head (small diamond shape)
-            Rectangle {
-                anchors.verticalCenter: parent.verticalCenter
-                anchors.right: parent.right
-                width: 12
-                height: 12
-                rotation: 45
-                color: "#ffcc33"
-                border.color: "#ffee88"
-                border.width: 1
-                opacity: 0.95
-                radius: 1
-            }
+            Rectangle { anchors.verticalCenter: parent.verticalCenter; anchors.right: parent.right; width: 12; height: 12; rotation: 45; color: "#ffcc33"; border.color: "#ffee88"; border.width: 1; opacity: 0.95; radius: 1 }
         }
-
     }
-
-    // Block tile (clickable)
     component BlockTile: Rectangle {
-        id: tile
-        property var blk
-        signal clicked()
-        radius: 12
-        border.color: "#2a2a2a"
-        color: tileColor()
-
-        function tileColor() {
-            if (!blk) return "#1a1a1a"
-            var even = (blk.height % 2) === 0
-            return even ? "#171a20" : "#1b1f27"
-        }
-
+        property var blk; signal clicked()
+        radius: 12; border.color: "#2a2a2a"; color: (blk && (blk.height % 2) === 0) ? "#171a20" : "#1b1f27"
         Column {
-            anchors.fill: parent
-            anchors.margins: 10
-            spacing: 4
-
+            anchors.fill: parent; anchors.margins: 10; spacing: 4
             Row { spacing: 8
                 Label { text: "#" + (blk ? blk.height : "—"); color: "white"; font.bold: true }
                 Rectangle { width: 6; height: 6; radius: 3; color: "#7aa2ff" }
-                Label {
-                    text: (blk && blk.hash) ? blk.hash.substr(0,10) + "…" : "—"
-                    color: "#cfcfcf"; font.pixelSize: 12
-                    elide: Text.ElideRight
-                }
+                Label { text: (blk && blk.hash) ? blk.hash.substr(0,10) + "…" : "—"; color: "#cfcfcf"; font.pixelSize: 12; elide: Text.ElideRight }
             }
-
             Label { text: (blk ? ("Tx:" + blk.txs + "  Out:" + blk.outputs + "  Ker:" + blk.kernels) : "—"); color: "#dddddd"; font.pixelSize: 12 }
             Label { text: (blk && blk.timestamp) ? new Date(blk.timestamp*1000).toLocaleTimeString() : "—"; color: "#aaaaaa"; font.pixelSize: 11 }
-
             Item { Layout.fillHeight: true }
         }
-
         MouseArea {
-            id: hover
-            anchors.fill: parent
-            hoverEnabled: true
-            onClicked: tile.clicked()
-            cursorShape: Qt.PointingHandCursor
-
-            Rectangle {
-                anchors.fill: parent
-                radius: tile.radius
-                color: Qt.rgba(1, 1, 1, 0.07)   // leichtes hellgrau-transparent
-                visible: parent.containsMouse
-            }
+            anchors.fill: parent; hoverEnabled: true; onClicked: parent.clicked(); cursorShape: Qt.PointingHandCursor
+            Rectangle { anchors.fill: parent; radius: tile.radius; color: Qt.rgba(1,1,1,0.07); visible: parent.containsMouse }
         }
     }
-
-    // Status bar
     component StatusBar: Rectangle {
         id: sb
         property string message: ""
-        property color bgOk: "#173022"
-        property color fgOk: "#b6ffd1"
-        property color bgErr: "#3a1616"
-        property color fgErr: "#ffb6b6"
-
-        height: implicitHeight
-        radius: 10
+        property color bgOk: "#173022"; property color fgOk: "#b6ffd1"
+        property color bgErr: "#3a1616"; property color fgErr: "#ffb6b6"
+        height: implicitHeight; radius: 10
         color: message.length ? bgOk : "transparent"
         border.color: message.length ? "#2a2a2a" : "transparent"
         opacity: message.length ? 1 : 0
         Behavior on opacity { NumberAnimation { duration: 160 } }
-
         function show(msg) { message = msg; color = bgOk; label.color = fgOk; hideTimer.restart() }
         function showError(msg) { message = msg; color = bgErr; label.color = fgErr; hideTimer.restart() }
-
         width: parent.width
-        Row {
-            anchors.fill: parent
-            anchors.margins: 10
-            spacing: 8
+        Row { anchors.fill: parent; anchors.margins: 10; spacing: 8
             Label { id: label; text: sb.message; color: sb.fgOk; elide: Text.ElideRight; Layout.fillWidth: true }
             DarkButton { text: "×"; onClicked: sb.message = "" }
         }

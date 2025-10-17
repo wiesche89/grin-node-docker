@@ -47,10 +47,16 @@
  */
 void registerAllMetaTypes()
 {
-    qRegisterMetaType<BlindingFactor>("BlindingFactor");
+    // Block-Types
+    qRegisterMetaType<BlockPrintable>("BlockPrintable");
     qRegisterMetaType<BlockHeaderPrintable>("BlockHeaderPrintable");
     qRegisterMetaType<BlockListing>("BlockListing");
-    qRegisterMetaType<BlockPrintable>("BlockPrintable");
+
+    // Ergebnis-Wrapper (ganz wichtig!)
+    qRegisterMetaType<Result<BlockPrintable>>("Result<BlockPrintable>");
+    qRegisterMetaType<Result<BlockHeaderPrintable>>("Result<BlockHeaderPrintable>");
+    qRegisterMetaType<Result<BlockListing>>("Result<BlockListing>");
+
     qRegisterMetaType<Capabilities>("Capabilities");
     qRegisterMetaType<Direction>("Direction");
     qRegisterMetaType<Difficulty>("Difficulty");
@@ -159,11 +165,6 @@ int main(int argc, char *argv[])
     QString concatenatedForeign = username + ":" + passwordForeign;
     foreignAuth = "Basic " + concatenatedForeign.toUtf8().toBase64();
 
-    qDebug() << "ownerAuth: " << ownerAuth;
-    qDebug() << "foreignAuth: " << foreignAuth;
-
-    qDebug() << "QDir::homePath(): " << QDir::homePath();
-
     // Node Owner Api Instance
     NodeOwnerApi *nodeOwnerApi = new NodeOwnerApi(ownerUrl, ownerAuth);
 
@@ -180,9 +181,6 @@ int main(int argc, char *argv[])
 
     Config config;
     config.loadFromNetwork(network);     // lädt ~/.grin/main/grin-server.toml
-
-    QString dbroot = config.value("server.db_root", "/default/path").toString();
-    qDebug() << "db_root =" << dbroot;
 
     engine.rootContext()->setContextProperty("config", &config);
 
