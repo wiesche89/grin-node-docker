@@ -61,7 +61,10 @@ void registerAllMetaTypes()
     qRegisterMetaType<Direction>("Direction");
     qRegisterMetaType<Difficulty>("Difficulty");
     qRegisterMetaType<Input>("Input");
+
+    qRegisterMetaType<Result<LocatedTxKernel>>("Result<LocatedTxKernel>");
     qRegisterMetaType<LocatedTxKernel>("LocatedTxKernel");
+
     qRegisterMetaType<MerkleProof>("MerkleProof");
     qRegisterMetaType<NodeVersion>("NodeVersion");
     qRegisterMetaType<OutputIdentifier>("OutputIdentifier");

@@ -7,158 +7,108 @@ Item {
     Layout.fillWidth: true
     Layout.fillHeight: true
 
-    // ---------- API-Handle wie in deiner funktionierenden Datei ----------
+    // ---------- API ----------
     readonly property var foreignApi: nodeForeignApi
 
     // ---------- Settings ----------
-    property int lastCount: 100
+    property int  lastCount: 100
+    property bool autoRefresh: true
+    property int  refreshIntervalMs: 5000
 
     // ---------- Chain state ----------
-    property var blocks: []            // oldest → newest
-    property string heightInput: ""
     property var tip: ({ height: 0, lastBlockPushed: "", prevBlockToLast: "", totalDifficulty: 0 })
+    property var blocksRaw: []        // volle Objekte inkl. inputs/outputs/kernels
+    property var blocks: []           // vereinfachte Kacheldaten (height/hash/…)
 
-    // ---------- Details ----------
-    property int   detailsHeight: -1
-    property var   hdrData: null
-    property var   kernelData: null
-    property var   outputsData: []
+    // ---------- Auswahl / Details (Binding-basiert) ----------
+    property int selectedIndex: -1
 
-    // ---------- Scroll helper ----------
-    property bool _wantScrollRight: false
-    function requestScrollRight() {
-        _wantScrollRight = true
-        if (flick && flick.contentWidth > 0)
-            flick.contentX = Math.max(0, flick.contentWidth - flick.width)
+    // ---------- Helpers ----------
+    function get(o, k, dflt) {
+        if (o === null || o === undefined) return dflt
+        if (o.hasOwnProperty && o.hasOwnProperty(k) && o[k] !== undefined) return o[k]
+        if (o[k] !== undefined) return o[k]
+        if (k in o) return o[k]
+        return dflt
     }
+    function toNum(x) { if (typeof x === "number" && isFinite(x)) return x; var n = Number(x); return isFinite(n) ? n : 0 }
+    function toTs(x)  { if (typeof x === "number" && isFinite(x)) return x; var ms = Date.parse(x || ""); return isNaN(ms) ? 0 : Math.floor(ms/1000) }
+    function headerOf(rb) { var h = get(rb,"header",null); if (!h) h = get(rb,"block_header",null); return h || {} }
 
-    // ---------- Mapping helpers ----------
-    function toTip(obj) {
-        if (!obj) return { height: 0, lastBlockPushed: "", prevBlockToLast: "", totalDifficulty: 0 }
-        function pick(o, keys) {
-            for (var i=0;i<keys.length;i++) {
-                var k=keys[i]; if (o.hasOwnProperty(k) && o[k]!==undefined && o[k]!==null) return o[k]
-                var lc=k.toLowerCase()
-                for (var p in o) if (String(p).toLowerCase()===lc && o[p]!==undefined && o[p]!==null) return o[p]
-            }
-            return undefined
-        }
-        var h  = obj.height;            if (h  === undefined) h  = pick(obj, ["height"])
-        var lb = obj.lastBlockPushed;   if (lb === undefined) lb = pick(obj, ["lastBlockPushed","last_block_pushed","last_block_h"])
-        var pv = obj.prevBlockToLast;   if (pv === undefined) pv = pick(obj, ["prevBlockToLast","prev_block_to_last","prev_block_h"])
-        var td = obj.totalDifficulty;   if (td === undefined) td = pick(obj, ["totalDifficulty","total_difficulty"])
-        return { height: Number(h||0), lastBlockPushed: String(lb||""), prevBlockToLast: String(pv||""), totalDifficulty: Number(td||0) }
-    }
-
-    function mapBlockPrintable(b) {
-        if (!b) return null
-        var hdr = b.header || b.block_header || b
-
-        // Liefert die Länge, wenn x Array-ähnlich ist, sonst 0
-        function countLike(x) {
-            if (x === undefined || x === null) return 0
-            // QML/Qt kann QVariantList/JS-Array liefern
-            if (Array.isArray(x)) return x.length
-            // Manche Qt-Container exposen 'length' als Property
-            if (typeof x === "object" && "length" in x && typeof x.length === "number")
-                return x.length
-            return 0
-        }
-        // Zahl extrahieren, falls schon numerisch vorhanden
-        function num(x) { return (typeof x === "number" && isFinite(x)) ? x : 0 }
-
-        // Zähler defensiv bestimmen:
-        var txs     = num(b.num_txs)     || num(b.txs)     || countLike(b.txs)     || 0
-        var outputs = num(b.outputs)     || num(b.num_outputs) || countLike(b.outputs) || countLike(b.outputsVariant) || 0
-        var kernels = num(b.kernels)     || num(b.num_kernels) || countLike(b.kernels) || countLike(b.kernelsVariant) || 0
-
-        // Header-Felder defensiv lesen
-        var height     = Number(hdr.height || b.height || 0)
-        var hash       = (hdr.hash || hdr.prev_root || b.hash || "")
-        var timestamp  = Number(hdr.timestamp || hdr.time || 0)
-        var difficulty = Number(hdr.total_difficulty || hdr.difficulty || 0)
-
+    function simplifyBlockForRow(rb) {
+        var h = headerOf(rb)
+        function count(x){ return Array.isArray(x) ? x.length : (x && typeof x.length === "number" ? x.length : 0) }
         return {
-            height: height,
-            hash: hash,
-            timestamp: timestamp,
-            txs: txs,
-            outputs: outputs,
-            kernels: kernels,
-            difficulty: difficulty
+            height: toNum(get(h,"height",0)),
+            hash: String(get(h,"hash","")),
+            timestamp: toTs(get(h,"timestamp",0)),
+            txs: toNum(get(rb,"num_txs",0)),
+            outputs: count(get(rb,"outputs",[])),
+            kernels: count(get(rb,"kernels",[])),
+            difficulty: toNum(get(h,"total_difficulty", get(h,"totalDifficulty",0)))
         }
     }
-
-
-    function mapHeaderPrintable(h) {
-        var hh = (h && (h.header || h.block_header || h)) || {}
-
-        function toTs(x) {
-            if (typeof x === "number" && isFinite(x)) return x
-            if (typeof x === "string" && x.length) {
-                var n = Number(x); if (isFinite(n)) return n
-                var ms = Date.parse(x); if (!isNaN(ms)) return Math.floor(ms/1000)
-            }
-            return 0
-        }
-        function toNum(x) { return (typeof x === "number" && isFinite(x)) ? x
-                                   : (typeof x === "string" && isFinite(Number(x)) ? Number(x) : 0) }
-
-        // WICHTIG: Nur dot-Access verwenden (GADGET!)
-        var height = toNum(hh.height)
-        var hash   = hh.hash || ""
-        var prev   = hh.previous || hh.prevRoot || ""
-        var ts     = toTs(hh.timestamp)          // QString (ISO) oder Zahl
-        var td     = toNum(hh.totalDifficulty)   // camelCase in deinem Header
-        var kroot  = hh.kernelRoot || ""
-        var oroot  = hh.outputRoot || ""
-
+    function mapHeaderFromRaw(rb) {
+        var h = headerOf(rb)
         return {
-            height: height,
-            hash: hash,
-            previous: prev,
-            timestamp: ts,
-            total_difficulty: td,
-            kernel_root: kroot,
-            output_root: oroot
+            height: toNum(get(h,"height",0)),
+            hash: String(get(h,"hash","")),
+            previous: String(get(h,"previous","")),
+            timestamp: toTs(get(h,"timestamp",0)),
+            total_difficulty: toNum(get(h,"total_difficulty", get(h,"totalDifficulty",0))),
+            kernel_root: String(get(h,"kernel_root","")),
+            output_root: String(get(h,"output_root",""))
         }
     }
-
-    function mapOutputPrintableList(list) {
+    function mapInputsFromRaw(rb) {
+        var arr = get(rb,"inputs",[]) || []
         var out = []
-        if (!list || !list.length) return out
-        for (var i=0; i<list.length; ++i) {
-            var o = list[i] || {}
+        for (var i=0;i<arr.length;i++) {
+            var it = arr[i]
+            if (typeof it === "string") out.push({ commit: it })
+            else out.push({ commit: get(it,"commit",get(it,"commitment","")), height: toNum(get(it,"height",get(it,"block_height",0))), spent: !!get(it,"spent",false) })
+        }
+        return out
+    }
+    function mapOutputsFromRaw(rb) {
+        var arr = get(rb,"outputs",[]) || []
+        var out = []
+        for (var i=0;i<arr.length;i++) {
+            var o = arr[i] || {}
             out.push({
-                commitment: o.commit || o.commitment || "",
-                features: o.features || (o.is_coinbase ? "Coinbase" : "Plain"),
-                proof: (o.proof || ""),
-                height: Number(o.height || 0)
+                commitment: get(o,"commit",get(o,"commitment","")),
+                output_type: get(o,"output_type", get(o,"is_coinbase",false) ? "Coinbase" : "Plain"),
+                height: toNum(get(o,"block_height",get(o,"height",0))),
+                mmr_index: toNum(get(o,"mmr_index",0)),
+                spent: !!get(o,"spent",false),
+                proof_hash: get(o,"proof_hash","")
             })
         }
         return out
     }
-    function mapLocatedTxKernel(k) {
-        var kk = k || {}
-        var kern = kk.tx_kernel || kk.kernel || kk || {}
-        return {
-            excess: (kern.excess || ""),
-            excess_sig: (kern.excess_sig || ""),
-            fee: Number(kern.fee || 0),
-            lock_height: Number(kern.lock_height || 0),
-            height: Number(kk.height || 0)
-        }
-    }
-
-    function mapBlockListing(listing) {
-        var arrSrc = (listing && (listing.blocksVariant || listing.blocks || listing.items || listing)) || []
+    function mapKernelsFromRaw(rb) {
+        var arr = get(rb,"kernels",[]) || []
         var out = []
-        for (var i = 0; i < arrSrc.length; ++i)
-            out.push(mapBlockPrintable(arrSrc[i]))
-        out.sort(function(a,b){ return a.height - b.height })
+        for (var i=0;i<arr.length;i++) {
+            var k = arr[i] || {}
+            out.push({
+                features: get(k,"features",""),
+                fee: toNum(get(k,"fee",0)),
+                lock_height: toNum(get(k,"lock_height",0)),
+                excess: get(k,"excess",""),
+                excess_sig: get(k,"excess_sig","")
+            })
+        }
         return out
     }
 
+    // ---------- Ableitungen aus Auswahl ----------
+    property var selectedRaw: (selectedIndex >= 0 && selectedIndex < blocksRaw.length) ? blocksRaw[selectedIndex] : null
+    property var hdrData:     selectedRaw ? mapHeaderFromRaw(selectedRaw)  : null
+    property var inputsData:  selectedRaw ? mapInputsFromRaw(selectedRaw)  : []
+    property var outputsData: selectedRaw ? mapOutputsFromRaw(selectedRaw) : []
+    property var kernelsData: selectedRaw ? mapKernelsFromRaw(selectedRaw) : []
+    property int detailsHeight: hdrData ? hdrData.height : -1
 
     // ---------- API calls ----------
     function refreshTip() {
@@ -170,107 +120,55 @@ Item {
         var start = Math.max(0, h - (lastCount - 1))
         try { foreignApi.getBlocksAsync(start, h, lastCount, false) } catch(e) { status.showError("getBlocksAsync: " + e) }
     }
-    function selectNewestForDetails() {
-        if (blocks.length === 0) { detailsHeight = -1; return }
-        detailsHeight = blocks[blocks.length - 1].height
-        if (foreignApi && detailsHeight >= 0) {
-            hdrData = null; kernelData = null; outputsData = []
-            Qt.callLater(function(){ try { foreignApi.getHeaderAsync(detailsHeight, "", "") } catch(e) { status.showError("getHeaderAsync: " + e) } })
-        }
-    }
-    function openDetails(h) {
-        var hh = Number(h)            // <— Zahl erzwingen
-        if (!isFinite(hh) || hh < 0) {
-            status.showError("Ungültige Block-Höhe")
-            return
-        }
-        detailsHeight = hh
-        if (foreignApi) {
-            hdrData = null; kernelData = null; outputsData = []
-            try {
-                foreignApi.getHeaderAsync(hh, "", "")
-                console.log("[QML] getHeaderAsync(", hh, ")")
-            } catch(e) {
-                status.showError("getHeaderAsync: " + e)
-            }
-        }
-    }
 
     // ---------- Lifecycle ----------
     Component.onCompleted: refreshTip()
     onForeignApiChanged: if (foreignApi) refreshTip()
 
-    // ---------- Signals (nur „Updated“-Signale nutzen) ----------
+    // ---------- Auto-Refresh ----------
+    Timer {
+        id: autoTimer
+        interval: refreshIntervalMs
+        repeat: true
+        running: autoRefresh
+        onTriggered: refreshTip()
+    }
+
+    // ---------- Signals ----------
     Connections {
         target: (typeof foreignApi === "object" && foreignApi) ? foreignApi : null
         ignoreUnknownSignals: true
 
-        // genau wie in deiner funktionierenden Datei
         function onTipUpdated(payload) {
-            tip = toTip(payload)
+            var t = payload || {}
+            var h  = get(t,"height",0)
+            var lb = get(t,"lastBlockPushed", get(t,"last_block_pushed",""))
+            var pv = get(t,"prevBlockToLast", get(t,"prev_block_to_last",""))
+            var td = get(t,"totalDifficulty", get(t,"total_difficulty",0))
+            tip = { height: toNum(h), lastBlockPushed: String(lb||""), prevBlockToLast: String(pv||""), totalDifficulty: toNum(td) }
 
-            if (tip.height > 0) {
-                // erst dann Blöcke holen (entkoppelt)
-                Qt.callLater(function(){ loadBlocksForTip(tip.height) })
-            } else {
-                // Keine Folge-Calls bei leerem Tip
-                blocks = []
-                detailsHeight = -1
-                hdrData = null; kernelData = null; outputsData = []
-            }
+            if (tip.height > 0) Qt.callLater(function(){ loadBlocksForTip(tip.height) })
+            else { blocksRaw = []; blocks = []; selectedIndex = -1 }
         }
 
-        // NEU: QML-fertige Liste
         function onBlocksUpdated(list, lastHeight) {
-            // mapBlockListing akzeptiert ein Objekt mit blocksVariant
-            var arr = mapBlockListing({ blocksVariant: list })
-            if (!arr || arr.length === 0) {
-                blocks = []
-                detailsHeight = -1
-                hdrData = null; kernelData = null; outputsData = []
-                status.show("Keine Blöcke empfangen")
-                return
+            blocksRaw = list || []
+
+            var simple = []
+            for (var i = 0; i < blocksRaw.length; ++i) {
+                var s = simplifyBlockForRow(blocksRaw[i])
+                s.rawIndex = i
+                simple.push(s)
             }
-            blocks = arr
-            requestScrollRight()
-            selectNewestForDetails()
-        }
+            simple.sort(function(a,b){ return a.height - b.height })
+            blocks = simple
 
-        function onHeaderUpdated(hdr) {
-            // Dot-Access – jetzt sicher
-            var ts = (typeof hdr.timestamp === "number") ? hdr.timestamp
-                     : (typeof hdr.timestamp === "string" ? Math.floor(Date.parse(hdr.timestamp)/1000) : 0)
+            selectedIndex = (blocksRaw.length > 0) ? (blocksRaw.length - 1) : -1
 
-            hdrData = {
-                height: Number(hdr.height || 0),
-                hash:   String(hdr.hash || ""),
-                previous: String(hdr.previous || hdr.prevRoot || ""),
-                timestamp: Number(ts || 0),
-                total_difficulty: Number(hdr.totalDifficulty || 0),
-                kernel_root: String(hdr.kernelRoot || ""),
-                output_root: String(hdr.outputRoot || "")
-            }
-
-            console.log("[QML] header h/hash/ts/td =",
-                        hdrData.height, hdrData.hash, hdrData.timestamp, hdrData.total_difficulty)
-        }
-
-
-
-        function onGetKernelFinished(r) {
-            if (r && typeof r.hasError === "function" && r.hasError()) {
-                status.showError(typeof r.errorString === "function" ? r.errorString() : "getKernel failed"); return
-            }
-            var v = (r && typeof r.value === "function") ? r.value() : (r && r.value)
-            kernelData = mapLocatedTxKernel(v)
-        }
-
-        function onGetOutputsFinished(r) {
-            if (r && typeof r.hasError === "function" && r.hasError()) {
-                status.showError(typeof r.errorString === "function" ? r.errorString() : "getOutputs failed"); return
-            }
-            var v = (r && typeof r.value === "function") ? r.value() : (r && r.value)
-            outputsData = mapOutputPrintableList(v)
+            // Scroll ganz nach rechts, wenn neue Blöcke kommen
+            Qt.callLater(function() {
+                flick.contentX = Math.max(0, flick.contentWidth - flick.width)
+            })
         }
     }
 
@@ -283,6 +181,7 @@ Item {
         RowLayout {
             Layout.fillWidth: true
             spacing: 12
+
             Label { text: "Chain"; color: "white"; font.pixelSize: 28; font.bold: true }
 
             Rectangle {
@@ -308,24 +207,44 @@ Item {
 
             Item { Layout.fillWidth: true }
 
-            DarkTextField {
-                id: heightField
-                placeholderText: "Block height…"
-                inputMethodHints: Qt.ImhDigitsOnly
-                validator: IntValidator { bottom: 0; top: 2147483647 }
-                text: heightInput
-                onTextChanged: heightInput = text
-                Layout.preferredWidth: 140
-            }
-            DarkButton {
-                text: "Load"
-                enabled: heightField.acceptableInput && heightField.text.length>0
-                onClicked: {
-                    var h = parseInt(heightField.text)
-                    if (!isNaN(h) && h >= 0) openDetails(h)
+            // ---- Auto-Refresh Switch + Text (statt CheckBox/Buttons/Feld) ----
+            Row {
+                spacing: 8
+                anchors.verticalCenter: parent.verticalCenter
+
+                Switch {
+                    id: autoSw
+                    checked: autoRefresh
+                    onToggled: autoRefresh = checked
+
+                    indicator: Rectangle {
+                        implicitWidth: 42
+                        implicitHeight: 22
+                        radius: 11
+                        color: autoSw.checked ? "#3a6df0" : "#2b2b2b"
+                        border.color: "#555"
+
+                        Rectangle {
+                            anchors.verticalCenter: parent.verticalCenter
+                            x: autoSw.checked ? parent.width - width - 2 : 2
+                            width: 18
+                            height: 18
+                            radius: 9
+                            color: "white"
+                        }
+                    }
+
+                    contentItem: Item {}   // kein Standardtext
+                    background: null
+                }
+
+                Label {
+                    text: autoSw.checked ? "Auto refresh: ON" : "Auto refresh: OFF"
+                    color: "#ddd"
+                    anchors.verticalCenter: autoSw.verticalCenter
                 }
             }
-            DarkButton { text: "Refresh"; onClicked: refreshTip() }
+
         }
 
         Label {
@@ -350,22 +269,10 @@ Item {
                 contentWidth: Math.max(chainRow.implicitWidth, width)
                 contentHeight: height
 
-                onContentWidthChanged: _applyScrollRight()
-                onWidthChanged: _applyScrollRight()
-                function _applyScrollRight() {
-                    if (_wantScrollRight && contentWidth > 0) {
-                        Qt.callLater(function() {
-                            contentX = Math.max(0, contentWidth - width)
-                            _wantScrollRight = false
-                        })
-                    }
-                }
-
                 Row {
                     id: chainRow
                     spacing: 0
                     height: parent.height
-                    onImplicitWidthChanged: flick._applyScrollRight()
 
                     Repeater {
                         model: Array.isArray(blocks) ? blocks.length : 0
@@ -375,12 +282,14 @@ Item {
                             connectorWidth: 48
                             blk: blocks[index]
                             showConnector: index < (blocks.length - 1)
-                            // im Repeater-Delegate:
-                            onClickedBlock: {
-                                // Debug hilft sofort zu sehen, ob der Klick feuert + welchen Wert wir schicken
-                                console.log("[QML] clicked height =", blk && blk.height)
-                                openDetails(blk && blk.height)
-                            }
+                            onClickedBlock: root.selectedIndex = blk.rawIndex
+                        }
+                    }
+
+                    // Scroll sofort nach rechts, wenn die Breite neu berechnet wurde
+                    onImplicitWidthChanged: {
+                        if (blocks.length > 0) {
+                            flick.contentX = Math.max(0, flick.contentWidth - flick.width)
                         }
                     }
                 }
@@ -406,13 +315,6 @@ Item {
                     Label { text: "Details für Block"; color: "#bbb" }
                     Label { text: detailsHeight >= 0 ? ("#" + detailsHeight) : "—"; color: "white"; font.bold: true }
                     Item { Layout.fillWidth: true }
-                    DarkButton {
-                        text: "Header neu laden"
-                        onClicked: {
-                            if (detailsHeight >= 0 && foreignApi)
-                                Qt.callLater(function(){ try { foreignApi.getHeaderAsync(detailsHeight, "", "") } catch(e) { status.showError("getHeaderAsync: " + e) } })
-                        }
-                    }
                 }
 
                 TabBar {
@@ -421,8 +323,9 @@ Item {
                     currentIndex: 0
                     background: Rectangle { radius: 8; color: "#151515"; border.color: "#2a2a2a"; height: parent.height }
                     DarkTabButton { text: "Header" }
-                    DarkTabButton { text: "Kernel" }
+                    DarkTabButton { text: "Inputs" }
                     DarkTabButton { text: "Outputs" }
+                    DarkTabButton { text: "Kernels" }
                 }
 
                 StackLayout {
@@ -430,6 +333,7 @@ Item {
                     Layout.fillHeight: true
                     currentIndex: tabsBar.currentIndex
 
+                    // Header
                     Item {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
@@ -447,156 +351,141 @@ Item {
                         }
                     }
 
+                    // Inputs
                     Item {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        ColumnLayout {
-                            anchors.fill: parent; anchors.margins: 10; spacing: 8
-                            RowLayout {
-                                Layout.fillWidth: true; spacing: 8
-                                DarkTextField { id: excessField; placeholderText: "excess (hex)…"; Layout.fillWidth: true; text: "" }
-                                DarkTextField {
-                                    id: minH; placeholderText: "min height"
-                                    validator: IntValidator { bottom: 0; top: 2147483647 }
-                                    inputMethodHints: Qt.ImhDigitsOnly
-                                    text: detailsHeight >= 0 ? String(Math.max(detailsHeight - 100, 0)) : "0"
-                                    Layout.preferredWidth: 120
-                                }
-                                DarkTextField {
-                                    id: maxH; placeholderText: "max height"
-                                    validator: IntValidator { bottom: 0; top: 2147483647 }
-                                    inputMethodHints: Qt.ImhDigitsOnly
-                                    text: detailsHeight >= 0 ? String(detailsHeight) : "0"
-                                    Layout.preferredWidth: 120
-                                }
-                                DarkButton {
-                                    text: "Kernel laden"
-                                    onClicked: {
-                                        if (detailsHeight < 0 || !foreignApi || !excessField.text.length) return
-                                        Qt.callLater(function(){ try { foreignApi.getKernelAsync(excessField.text, parseInt(minH.text||"0"), parseInt(maxH.text||"0")) } catch(e) { status.showError("getKernelAsync: " + e) } })
-                                    }
-                                }
-                            }
-                            Frame {
-                                Layout.fillWidth: true; Layout.fillHeight: true
-                                background: Rectangle { color: "#141414"; radius: 10; border.color: "#2a2a2a" }
-                                padding: 10
+                        Frame {
+                            anchors.fill: parent
+                            background: Rectangle { color: "#141414"; radius: 10; border.color: "#2a2a2a" }
+                            padding: 10
+                            Flickable {
+                                anchors.fill: parent
+                                clip: true
+                                contentWidth: parent.width
+                                contentHeight: inCol.implicitHeight
                                 Column {
-                                    anchors.fill: parent; spacing: 6
-                                    Label { text: kernelData ? "Excess: " + kernelData.excess : "—"; color: "#ddd" }
-                                    Label { text: kernelData ? "Excess sig: " + kernelData.excess_sig : ""; color: "#bbb" }
-                                    Label { text: kernelData ? "Fee: " + kernelData.fee : ""; color: "#bbb" }
-                                    Label { text: kernelData ? "Lock height: " + kernelData.lock_height : ""; color: "#bbb" }
-                                    Label { text: kernelData && kernelData.height ? "Found at height: " + kernelData.height : ""; color: "#bbb" }
+                                    id: inCol
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    spacing: 8
+                                    Label { text: inputsData.length + " Inputs"; color: "#ddd" }
+
+                                    Repeater {
+                                        model: inputsData
+                                        delegate: Rectangle {
+                                            radius: 8
+                                            color: "#1a1a1a"
+                                            border.color: "#2a2a2a"
+                                            width: parent.width
+                                            implicitHeight: col.implicitHeight + 12
+                                            height: implicitHeight
+
+                                            Column {
+                                                id: col
+                                                anchors.fill: parent
+                                                anchors.margins: 8
+                                                spacing: 4
+                                                Label { text: "Commit: " + (modelData.commit || "—"); color: "#ddd" }
+                                                Label { visible: (modelData.height || 0) > 0; text: "Height: " + modelData.height; color: "#bbb" }
+                                                Label { visible: modelData.spent !== undefined; text: "Spent: " + (modelData.spent ? "yes" : "no"); color: "#bbb" }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
 
+                    // Outputs
                     Item {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        ColumnLayout {
-                            anchors.fill: parent; anchors.margins: 10; spacing: 8
-                            RowLayout {
-                                Layout.fillWidth: true; spacing: 8
-                                DarkTextArea {
-                                    id: commitsArea
-                                    placeholderText: "commitments (hex), getrennt durch Komma/Leerzeichen/Zeilenumbruch"
-                                    Layout.fillWidth: true; Layout.preferredHeight: 70
-                                    wrapMode: TextEdit.WrapAnywhere
-                                }
-                                ColumnLayout {
-                                    spacing: 6
-                                    DarkTextField {
-                                        id: outMinH; placeholderText: "min height"
-                                        validator: IntValidator { bottom: 0; top: 2147483647 }
-                                        inputMethodHints: Qt.ImhDigitsOnly
-                                        text: detailsHeight >= 0 ? String(Math.max(detailsHeight - 100, 0)) : "0"
-                                        Layout.preferredWidth: 120
-                                    }
-                                    DarkTextField {
-                                        id: outMaxH; placeholderText: "max height"
-                                        validator: IntValidator { bottom: 0; top: 2147483647 }
-                                        inputMethodHints: Qt.ImhDigitsOnly
-                                        text: detailsHeight >= 0 ? String(detailsHeight) : "0"
-                                        Layout.preferredWidth: 120
-                                    }
-                                    RowLayout {
-                                        spacing: 6
-                                        CheckBox {
-                                            id: includeProof; text: "Proof"; checked: false
-                                            indicator: Rectangle { implicitWidth: 18; implicitHeight: 18; radius: 3; color: includeProof.checked ? "#3a6df0" : "#2b2b2b"; border.color: "#555" }
-                                            contentItem: Text { text: includeProof.text; color: "#ddd"; verticalAlignment: Text.AlignVCenter }
-                                            background: null
-                                        }
-                                        CheckBox {
-                                            id: includeMerkle; text: "Merkle"; checked: false
-                                            indicator: Rectangle { implicitWidth: 18; implicitHeight: 18; radius: 3; color: includeMerkle.checked ? "#3a6df0" : "#2b2b2b"; border.color: "#555" }
-                                            contentItem: Text { text: includeMerkle.text; color: "#ddd"; verticalAlignment: Text.AlignVCenter }
-                                            background: null
-                                        }
-                                    }
-                                    DarkButton {
-                                        text: "Outputs laden"
-                                        onClicked: {
-                                            if (detailsHeight < 0 || !foreignApi) return
-                                            var commits = []
-                                            var raw = commitsArea.text.split(/[, \n]+/)
-                                            for (var i=0;i<raw.length;i++) {
-                                                var c = raw[i].trim(); if (c.length) commits.push(c)
+                        Frame {
+                            anchors.fill: parent
+                            background: Rectangle { color: "#141414"; radius: 10; border.color: "#2a2a2a" }
+                            padding: 10
+                            Flickable {
+                                anchors.fill: parent
+                                clip: true
+                                contentWidth: parent.width
+                                contentHeight: outCol.implicitHeight
+                                Column {
+                                    id: outCol
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    spacing: 8
+                                    Label { text: outputsData.length + " Outputs"; color: "#ddd" }
+
+                                    Repeater {
+                                        model: outputsData
+                                        delegate: Rectangle {
+                                            radius: 8
+                                            color: "#1a1a1a"
+                                            border.color: "#2a2a2a"
+                                            width: parent.width
+                                            implicitHeight: col.implicitHeight + 12
+                                            height: implicitHeight
+
+                                            Column {
+                                                id: col
+                                                anchors.fill: parent
+                                                anchors.margins: 8
+                                                spacing: 4
+                                                Label { text: "Commitment: " + (modelData.commitment || "—"); color: "#ddd" }
+                                                Label { text: "Type: " + (modelData.output_type || "—"); color: "#bbb" }
+                                                Label { text: "Height: " + (modelData.height || "—"); color: "#bbb" }
+                                                Label { text: "MMR index: " + (modelData.mmr_index || "—"); color: "#bbb" }
+                                                Label { text: "Spent: " + (modelData.spent ? "yes" : "no"); color: "#bbb" }
+                                                Label { visible: !!modelData.proof_hash; text: "Proof hash: " + modelData.proof_hash; color: "#777" }
                                             }
-                                            Qt.callLater(function(){
-                                                try {
-                                                    foreignApi.getOutputsAsync(
-                                                        commits,
-                                                        parseInt(outMinH.text||"0"),
-                                                        parseInt(outMaxH.text||"0"),
-                                                        includeProof.checked,
-                                                        includeMerkle.checked
-                                                    )
-                                                } catch(e) { status.showError("getOutputsAsync: " + e) }
-                                            })
                                         }
                                     }
                                 }
                             }
-                            Frame {
-                                Layout.fillWidth: true; Layout.fillHeight: true
-                                background: Rectangle { color: "#141414"; radius: 10; border.color: "#2a2a2a" }
-                                padding: 10
+                        }
+                    }
 
-                                Flickable {
-                                    anchors.fill: parent
-                                    contentWidth: parent.width
-                                    contentHeight: outCol.implicitHeight
-                                    clip: true
+                    // Kernels
+                    Item {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        Frame {
+                            anchors.fill: parent
+                            background: Rectangle { color: "#141414"; radius: 10; border.color: "#2a2a2a" }
+                            padding: 10
+                            Flickable {
+                                anchors.fill: parent
+                                clip: true
+                                contentWidth: parent.width
+                                contentHeight: kerCol.implicitHeight
+                                Column {
+                                    id: kerCol
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    spacing: 8
+                                    Label { text: kernelsData.length + " Kernels"; color: "#ddd" }
 
-                                    Column {
-                                        id: outCol
-                                        anchors.left: parent.left
-                                        anchors.right: parent.right
-                                        spacing: 8
+                                    Repeater {
+                                        model: kernelsData
+                                        delegate: Rectangle {
+                                            radius: 8
+                                            color: "#1a1a1a"
+                                            border.color: "#2a2a2a"
+                                            width: parent.width
+                                            implicitHeight: col.implicitHeight + 12
+                                            height: implicitHeight
 
-                                        Repeater {
-                                            model: outputsData
-                                            delegate: Rectangle {
-                                                radius: 8
-                                                color: "#1a1a1a"
-                                                border.color: "#2a2a2a"
-                                                width: parent.width
-                                                height: column.implicitHeight + 12
-
-                                                Column {
-                                                    id: column
-                                                    anchors.fill: parent
-                                                    anchors.margins: 8
-                                                    spacing: 4
-                                                    Label { text: "Commitment: " + (modelData.commitment || "—"); color: "#ddd" }
-                                                    Label { text: "Features: " + (modelData.features || "—"); color: "#bbb" }
-                                                    Label { text: "Height: " + (modelData.height || "—"); color: "#bbb" }
-                                                    Label { visible: !!modelData.proof; text: "Proof: " + modelData.proof; color: "#777" }
-                                                }
+                                            Column {
+                                                id: col
+                                                anchors.fill: parent
+                                                anchors.margins: 8
+                                                spacing: 4
+                                                Label { text: "Features: " + (modelData.features || "—"); color: "#ddd" }
+                                                Label { text: "Fee: " + modelData.fee; color: "#bbb" }
+                                                Label { text: "Lock height: " + modelData.lock_height; color: "#bbb" }
+                                                Label { text: "Excess: " + (modelData.excess || "—"); color: "#bbb"; wrapMode: Text.WrapAnywhere }
+                                                Label { text: "Excess sig: " + (modelData.excess_sig || "—"); color: "#777"; wrapMode: Text.WrapAnywhere }
                                             }
                                         }
                                     }
@@ -608,7 +497,6 @@ Item {
             }
         }
 
-        // Hinweis solange nichts da ist
         Label {
             visible: blocks.length === 0 && tip.height === 0
             text: "Lade Tip …"
@@ -642,11 +530,6 @@ Item {
         contentItem: Text { text: control.text; color: control.fg; font.pixelSize: 14; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight }
     }
     component DarkTextField: TextField {
-        color: "white"; placeholderTextColor: "#777"; selectionColor: "#3a6df0"; selectedTextColor: "white"
-        background: Rectangle { radius: 6; color: "#2b2b2b"; border.color: "#555"; border.width: 1 }
-        padding: 8; font.pixelSize: 14
-    }
-    component DarkTextArea: TextArea {
         color: "white"; placeholderTextColor: "#777"; selectionColor: "#3a6df0"; selectedTextColor: "white"
         background: Rectangle { radius: 6; color: "#2b2b2b"; border.color: "#555"; border.width: 1 }
         padding: 8; font.pixelSize: 14
