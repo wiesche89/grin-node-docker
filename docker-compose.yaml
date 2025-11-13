@@ -1,0 +1,17 @@
+version: "3.9"
+
+services:
+  wasm-app:
+    build: .
+    image: grin-wasm-nginx:latest
+    container_name: grin-wasm-nginx
+    restart: unless-stopped
+
+    ports:
+      - "8081:80"
+      
+    environment:
+      TZ: "Europe/Berlin"
+
+    volumes:
+      - ./nginx-logs:/var/log/nginx
