@@ -48,19 +48,19 @@ public:
 
     // QML API (unverändert) ...
     Q_INVOKABLE void getStatus();
+
     Q_INVOKABLE void startRust(const QStringList &args = {});
     Q_INVOKABLE void stopRust();
     Q_INVOKABLE void restartRust(const QStringList &args = {});
     Q_INVOKABLE void getLogsRust(int n = 100);
+
     Q_INVOKABLE void startGrinPP(const QStringList &args = {});
     Q_INVOKABLE void stopGrinPP();
     Q_INVOKABLE void restartGrinPP(const QStringList &args = {});
     Q_INVOKABLE void getLogsGrinPP(int n = 100);
-    Q_INVOKABLE void getPeers();
+
     Q_INVOKABLE void startStatusPolling(int intervalMs);
     Q_INVOKABLE void stopStatusPolling();
-    Q_INVOKABLE void startConnectedPeersPolling(int intervalMs);
-    Q_INVOKABLE void stopConnectedPeersPolling();
 
     // Properties
     QUrl baseUrl() const
@@ -121,7 +121,6 @@ public:
 
 signals:
     void statusReceived(const QJsonObject &json);
-    void peersReceived(const QJsonArray &peers);
     void logsReceived(const QString &logs);
     void nodeStarted(GrinNodeManager::NodeKind kind);
     void nodeStopped(GrinNodeManager::NodeKind kind);
@@ -150,7 +149,6 @@ private:
     Options m_opts;
     QNetworkAccessManager *m_net{nullptr};
     QTimer m_statusTimer;
-    QTimer m_peersTimer;
     QString m_lastResponse;
 };
 

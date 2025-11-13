@@ -24,9 +24,6 @@ void GrinNodeManager::initNetwork()
 
     m_statusTimer.setSingleShot(false);
     connect(&m_statusTimer, &QTimer::timeout, this, &GrinNodeManager::getStatus);
-
-    m_peersTimer.setSingleShot(false);
-    connect(&m_peersTimer, &QTimer::timeout, this, &GrinNodeManager::getPeers);
 }
 
 // NEU: Default-Ctor für QML
@@ -95,13 +92,6 @@ void GrinNodeManager::getStatus()
     m_net->get(req);
 }
 
-void GrinNodeManager::getPeers()
-{
-    // Passe Pfad an deinen Controller an (z. B. "/peers" oder "/status/peers")
-    QNetworkRequest req = makeRequest("/peers");
-    m_net->get(req);
-}
-
 // Polling
 void GrinNodeManager::startStatusPolling(int intervalMs)
 {
@@ -114,19 +104,6 @@ void GrinNodeManager::startStatusPolling(int intervalMs)
 void GrinNodeManager::stopStatusPolling()
 {
     m_statusTimer.stop();
-}
-
-void GrinNodeManager::startConnectedPeersPolling(int intervalMs)
-{
-    if (intervalMs < 1000) {
-        intervalMs = 1000;
-    }
-    m_peersTimer.start(intervalMs);
-}
-
-void GrinNodeManager::stopConnectedPeersPolling()
-{
-    m_peersTimer.stop();
 }
 
 // ---------- Core helpers ----------
@@ -229,22 +206,12 @@ void GrinNodeManager::onReplyFinished(QNetworkReply *reply)
     } else if (path.contains("/logs/")) {
         emit logsReceived(QString::fromUtf8(payload));
     } else if (path.contains("/start/")) {
+        qDebug() << "[GrinNodeManager] start reply path=" << path;
         emit nodeStarted(path.contains("rust") ? NodeKind::Rust : NodeKind::GrinPP);
     } else if (path.contains("/stop/")) {
         emit nodeStopped(path.contains("rust") ? NodeKind::Rust : NodeKind::GrinPP);
     } else if (path.contains("/restart/")) {
         emit nodeRestarted(path.contains("rust") ? NodeKind::Rust : NodeKind::GrinPP);
-    } else if (path.contains("/peers")) {
-        // Expect JSON array; if object, try to unwrap "peers"
-        QJsonParseError err{};
-        const auto doc = QJsonDocument::fromJson(payload, &err);
-        if (err.error == QJsonParseError::NoError) {
-            if (doc.isArray()) {
-                emit peersReceived(doc.array());
-            } else if (doc.isObject() && doc.object().contains("peers") && doc.object().value("peers").isArray()) {
-                emit peersReceived(doc.object().value("peers").toArray());
-            }
-        }
     }
 
     finish();

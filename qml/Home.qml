@@ -24,11 +24,12 @@ Item {
     // ---------------------------------------------
     GrinNodeManager {
         id: mgr
-        baseUrl: "http://127.0.0.1:8080"
+        baseUrl: "http://localhost:8080"
         username: ""
         password: ""
 
         onNodeStarted: (kind) => {
+            console.log("QML: nodeStarted signal received, kind=", kind);
             nodeState = (kind === GrinNodeManager.Rust) ? "rust" : "grinpp";
             bootTimer.restart();           // deine 10s Wartezeit
         }
@@ -44,14 +45,50 @@ Item {
             }
         }
         onErrorOccurred: (msg) => {
+            console.log("QML: errorOccurred", msg);
             if (nodeState === "rustStarting" || nodeState === "grinppStarting")
                 nodeState = "none";
         }
 
         onLastResponseChanged: {
-            // Nur noch die Rohantwort anzeigen; keine Sync-Berechnung mehr hier.
             responseField.text = mgr.lastResponse
+
+            if (!mgr.lastResponse || mgr.lastResponse === "")
+                return;
+
+            try {
+                var obj = JSON.parse(mgr.lastResponse);
+
+                if (obj && obj.status && typeof obj.status === "object") {
+                    var st = obj.status;
+                    var running = st.running === true;
+                    var id = st.id || "";
+
+                    if (running) {
+                        // --- STATE UPDATE ---
+                        if (id === "rust")
+                            homeRoot.nodeState = "rust";
+                        else if (id === "grinpp")
+                            homeRoot.nodeState = "grinpp";
+
+                        // --- BOOT TIMER STARTEN ---
+                        if (!bootTimer.running) {
+                            console.log("BootTimer gestartet über lastResponse");
+                            bootTimer.restart();
+                        }
+
+                    } else {
+                        // Node wurde gestoppt
+                        if (homeRoot.nodeState === "rust" || homeRoot.nodeState === "grinpp")
+                            homeRoot.nodeState = "none";
+                    }
+                }
+            } catch (e) {
+                console.log("Failed to parse mgr.lastResponse:", e, mgr.lastResponse);
+            }
         }
+
+
     }
 
     // ---------------------------------------------

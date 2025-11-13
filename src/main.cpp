@@ -53,16 +53,16 @@ void registerAllMetaTypes()
     qRegisterMetaType<BlockListing>("BlockListing");
 
     // Ergebnis-Wrapper (ganz wichtig!)
-    qRegisterMetaType<Result<BlockPrintable>>("Result<BlockPrintable>");
-    qRegisterMetaType<Result<BlockHeaderPrintable>>("Result<BlockHeaderPrintable>");
-    qRegisterMetaType<Result<BlockListing>>("Result<BlockListing>");
+    qRegisterMetaType<Result<BlockPrintable> >("Result<BlockPrintable>");
+    qRegisterMetaType<Result<BlockHeaderPrintable> >("Result<BlockHeaderPrintable>");
+    qRegisterMetaType<Result<BlockListing> >("Result<BlockListing>");
 
     qRegisterMetaType<Capabilities>("Capabilities");
     qRegisterMetaType<Direction>("Direction");
     qRegisterMetaType<Difficulty>("Difficulty");
     qRegisterMetaType<Input>("Input");
 
-    qRegisterMetaType<Result<LocatedTxKernel>>("Result<LocatedTxKernel>");
+    qRegisterMetaType<Result<LocatedTxKernel> >("Result<LocatedTxKernel>");
     qRegisterMetaType<LocatedTxKernel>("LocatedTxKernel");
 
     qRegisterMetaType<MerkleProof>("MerkleProof");
@@ -94,24 +94,6 @@ void registerAllMetaTypes()
     qRegisterMetaType<QList<PoolEntry> >("QList<PoolEntry>");
     qRegisterMetaType<QList<PeerData> >("QList<PeerData>");
     qRegisterMetaType<PeerAddr>("PeerAddr");
-
-}
-
-/**
- * @brief readFileToString
- * @param filePath
- * @return
- */
-QString readFileToString(const QString &filePath)
-{
-    QFile file(filePath);
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        qWarning() << "Could not open file:" << file.errorString();
-        return {};
-    }
-
-    QTextStream in(&file);
-    return in.readAll();
 }
 
 /**
@@ -126,14 +108,12 @@ int main(int argc, char *argv[])
     // Variables
     // -----------------------------------------------------------------------------------------------------------------------
     QString ownerUrl;
-    QString ownerAuth;
     QString foreignUrl;
-    QString foreignAuth;
     QString network;
     QString port;
 
     network = "main"; // main or test
-    port = "3413"; // main = 3413 or test = 13413
+    port = "8080"; // main = 3413 or test = 13413
 
     // -----------------------------------------------------------------------------------------------------------------------
     // App configuration
@@ -151,28 +131,14 @@ int main(int argc, char *argv[])
     // -----------------------------------------------------------------------------------------------------------------------
     // API configuration
     // -----------------------------------------------------------------------------------------------------------------------
-    ownerUrl = QString("http://127.0.0.1:%1/v2/owner").arg(port);
-    foreignUrl = QString("http://127.0.0.1:%1/v2/foreign").arg(port);
-
-    // Username & Passwort
-    QString username = "grin";
-    QString passwordOwner;
-    QString passwordForeign;
-
-    passwordOwner = readFileToString(QString(QDir::homePath() + "/.grin/%1/.api_secret").arg(network));
-    passwordForeign = readFileToString(QString(QDir::homePath() + "/.grin/%1/.foreign_api_secret").arg(network));
-
-    QString concatenatedOwner = username + ":" + passwordOwner;
-    ownerAuth = "Basic " + concatenatedOwner.toUtf8().toBase64();
-
-    QString concatenatedForeign = username + ":" + passwordForeign;
-    foreignAuth = "Basic " + concatenatedForeign.toUtf8().toBase64();
+    ownerUrl = QString("http://localhost:%1/v2/owner").arg(port);
+    foreignUrl = QString("http://localhost:%1/v2/foreign").arg(port);
 
     // Node Owner Api Instance
-    NodeOwnerApi *nodeOwnerApi = new NodeOwnerApi(ownerUrl, ownerAuth);
+    NodeOwnerApi *nodeOwnerApi = new NodeOwnerApi(ownerUrl, QString());
 
     // Node Foreign Api Instance
-    NodeForeignApi *nodeForeignApi = new NodeForeignApi(foreignUrl, foreignAuth);
+    NodeForeignApi *nodeForeignApi = new NodeForeignApi(foreignUrl, QString());
 
     // -----------------------------------------------------------------------------------------------------------------------
     // Start qml engine
