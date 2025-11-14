@@ -52,6 +52,8 @@ RUN set -e; \
         cp "$first_html" /usr/share/nginx/html/index.html; \
       fi; \
     fi
+	
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
 # CMD/ENTRYPOINT kommen vom nginx-Base-Image (daemon off;)
