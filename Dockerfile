@@ -1,7 +1,7 @@
 # =========================
 # Stage 1: Qt WebAssembly Build (qmake + .pro, Submodule kommen aus Build-Context)
 # =========================
-FROM madmanfred/qt-webassembly AS wasm-builder
+FROM --platform=linux/amd64 madmanfred/qt-webassembly AS wasm-builder
 
 # Arbeitsverzeichnis im Builder
 WORKDIR /src
