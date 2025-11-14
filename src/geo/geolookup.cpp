@@ -1,4 +1,4 @@
-#include "GeoLookup.h"
+#include "geolookup.h"
 #include <QNetworkAccessManager>
 #include <QNetworkRequest>
 #include <QNetworkReply>

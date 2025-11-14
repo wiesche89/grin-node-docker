@@ -53,16 +53,18 @@ void registerAllMetaTypes()
     qRegisterMetaType<BlockListing>("BlockListing");
 
     // Ergebnis-Wrapper (ganz wichtig!)
+#ifndef Q_OS_WASM
     qRegisterMetaType<Result<BlockPrintable> >("Result<BlockPrintable>");
     qRegisterMetaType<Result<BlockHeaderPrintable> >("Result<BlockHeaderPrintable>");
     qRegisterMetaType<Result<BlockListing> >("Result<BlockListing>");
+    qRegisterMetaType<Result<LocatedTxKernel> >("Result<LocatedTxKernel>");
+#endif
 
     qRegisterMetaType<Capabilities>("Capabilities");
     qRegisterMetaType<Direction>("Direction");
     qRegisterMetaType<Difficulty>("Difficulty");
     qRegisterMetaType<Input>("Input");
 
-    qRegisterMetaType<Result<LocatedTxKernel> >("Result<LocatedTxKernel>");
     qRegisterMetaType<LocatedTxKernel>("LocatedTxKernel");
 
     qRegisterMetaType<MerkleProof>("MerkleProof");
