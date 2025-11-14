@@ -34,3 +34,9 @@ RESOURCES += \
 include(src/submodules/grin-common-api/grin-common-api.pri)
 include(src/submodules/grin-node-api/grin-node-api.pri)
 
+wasm {
+    # Initialen Speicher von 16 MB auf 32 MB erhöhen
+    # (32 * 1024 * 1024 = 33554432)
+    QMAKE_LFLAGS += -s TOTAL_MEMORY=33554432
+}
+
