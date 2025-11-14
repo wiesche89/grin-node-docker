@@ -64,7 +64,7 @@ void GeoLookup::lookupIPs(const QVariantList &ips)
             qWarning() << "GeoLookup JSON Fehler:" << err.errorString();
         } else {
             QJsonArray arr = doc.array();
-            for (const QJsonValue &v : std::as_const(arr)) {
+            for (const QJsonValue &v : arr) {
                 QJsonObject obj = v.toObject();
                 if (obj.value("status").toString() == "success") {
                     QString ip = obj.value("query").toString();
