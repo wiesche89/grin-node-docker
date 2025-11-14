@@ -1,13 +1,13 @@
 # =========================
 # Stage 1: Qt WebAssembly Build (qmake + .pro)
 # =========================
-FROM forderud/qtwasm:v6.9.2 AS wasm-builder
+FROM madmanfred/qt-webassembly AS wasm-builder
 
 # Arbeitsverzeichnis im Builder
 WORKDIR /src
 
 # Projekt aus dem Build-Context in den Container kopieren
-# (du baust später mit: docker build -t grin-wasm .)
+# (du baust später mit: docker build -t grin-node-docker-wasm .)
 COPY . .
 
 # Qt WASM-Build über qmake (.pro) + make
