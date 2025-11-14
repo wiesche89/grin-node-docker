@@ -87,7 +87,7 @@ void registerAllMetaTypes()
     qRegisterMetaType<Commitment>("Commitment");
     qRegisterMetaType<Output>("Output");
 
-    qRegisterMetaType<GeoLookup>("GeoLookup");
+    qRegisterMetaType<GeoLookup*>("GeoLookup*");
 
     qmlRegisterType<GrinNodeManager>("Grin", 1, 0, "GrinNodeManager");
 

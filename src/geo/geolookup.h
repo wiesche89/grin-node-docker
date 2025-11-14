@@ -27,4 +27,6 @@ private:
     QHash<QString, LatLon> m_cache; // ip -> lat/lon
 };
 
+Q_DECLARE_METATYPE(GeoLookup*)
+
 #endif // GEOLOOKUP_H
