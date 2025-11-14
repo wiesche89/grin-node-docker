@@ -1,14 +1,17 @@
 # =========================
-# Stage 1: Qt WebAssembly Build (qmake + .pro)
+# Stage 1: Qt WebAssembly Build (qmake + .pro + Submodule)
 # =========================
 FROM madmanfred/qt-webassembly AS wasm-builder
 
 # Arbeitsverzeichnis im Builder
 WORKDIR /src
 
-# Projekt aus dem Build-Context in den Container kopieren
-# (du baust später mit: docker build -t grin-node-docker-wasm .)
-COPY . .
+# Cache-Breaker nur, falls du mal forcen willst
+ARG CACHE_BREAKER=1
+
+# Repo + Submodule klonen (wichtig für nodeforeignapi.h & Co.)
+RUN git clone --recurse-submodules --branch main --single-branch \
+    https://github.com/wiesche89/grin-node-docker.git .
 
 # Qt WASM-Build über qmake (.pro) + make
 # grin-node-docker.pro liegt im Repo-Root
@@ -16,7 +19,6 @@ RUN qmake grin-node-docker.pro CONFIG+=release \
  && make -j"$(nproc)"
 
 # Build-Artefakte einsammeln (HTML/JS/WASM/DATA) nach /dist
-# -> generisch: nimmt alle im Projekt-Root erzeugten Dateien mit passenden Endungen
 RUN mkdir -p /dist \
  && cp ./*.html ./*.js ./*.wasm ./*.data /dist 2>/dev/null || true
 
