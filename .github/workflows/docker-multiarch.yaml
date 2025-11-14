@@ -37,6 +37,6 @@ jobs:
           platforms: linux/amd64,linux/arm64/v8
           push: true
           tags: |
-            wiesche89/grin-node-docker:latest
+            wiesche89/grin-node-docker:0.1.0
             wiesche89/grin-node-docker:${{ github.ref_name }}
             wiesche89/grin-node-docker:${{ github.sha }}
