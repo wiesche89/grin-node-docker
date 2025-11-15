@@ -1,7 +1,10 @@
 # =========================
 # Stage 1: Qt WebAssembly Build (qmake + .pro, Submodule kommen aus Build-Context)
 # =========================
-FROM --platform=linux/amd64 madmanfred/qt-webassembly AS wasm-builder
+# HIER dein eigenes Qt6-WASM-Baseimage eintragen:
+# z.B. lokal:   qt6-wasm:local
+# oder aus Hub: wiesche89/qt6-wasm:6.9.1-emsdk3.1.70
+FROM qt6-wasm:local AS wasm-builder
 
 # Arbeitsverzeichnis im Builder
 WORKDIR /src
@@ -11,13 +14,15 @@ WORKDIR /src
 COPY . .
 
 # Qt WASM-Build über qmake (.pro) + make
-# grin-node-docker.pro liegt im Repo-Root
+# In deinem Repo liegt grin-node-docker.pro im Root
+# qmake oder qmake6 – dein Base-Image hat beides i.d.R. im PATH
 RUN qmake grin-node-docker.pro CONFIG+=release \
  && make -j"$(nproc)"
 
 # Build-Artefakte einsammeln (HTML/JS/WASM/DATA) nach /dist
 RUN mkdir -p /dist \
  && cp ./*.html ./*.js ./*.wasm ./*.data /dist 2>/dev/null || true
+
 
 
 # =========================
