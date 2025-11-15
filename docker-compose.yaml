@@ -3,12 +3,12 @@ version: "3.9"
 services:
   wasm-app:
     build: .
-    image: grin-wasm-nginx:latest
-    container_name: grin-wasm-nginx
+    image: grin-node-docker:latest
+    container_name: grin-node-docker
     restart: unless-stopped
 
     ports:
-      - "8082:80"
+      - "8083:80"
       
     environment:
       TZ: "Europe/Berlin"
