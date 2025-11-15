@@ -53,7 +53,5 @@ RUN set -e; \
       fi; \
     fi
 	
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-
 EXPOSE 80
 # CMD/ENTRYPOINT kommen vom nginx-Base-Image (daemon off;)
