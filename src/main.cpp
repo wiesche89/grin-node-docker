@@ -3,8 +3,6 @@
 #include <QQmlContext>
 #include <QQuickStyle>
 #include <QIcon>
-#include <QFile>
-#include <QDir>
 
 #include "grinnodemanager.h"
 #include "nodeforeignapi.h"
@@ -32,6 +30,7 @@
 #include "protocolversion.h"
 #include "rangeproof.h"
 #include "status.h"
+#include "syncinfo.h"
 #include "tip.h"
 #include "transaction.h"
 #include "transactionbody.h"
@@ -41,6 +40,7 @@
 #include "commitment.h"
 #include "output.h"
 #include "geolookup.h"
+#include "result.h"
 
 /**
  * @brief registerAllMetaTypes
@@ -52,8 +52,8 @@ void registerAllMetaTypes()
     qRegisterMetaType<BlockHeaderPrintable>("BlockHeaderPrintable");
     qRegisterMetaType<BlockListing>("BlockListing");
 
-    // Ergebnis-Wrapper (ganz wichtig!)
 #ifndef Q_OS_WASM
+    // Ergebnis-Wrapper (werden in C++-Callbacks genutzt)
     qRegisterMetaType<Result<BlockPrintable> >("Result<BlockPrintable>");
     qRegisterMetaType<Result<BlockHeaderPrintable> >("Result<BlockHeaderPrintable>");
     qRegisterMetaType<Result<BlockListing> >("Result<BlockListing>");
@@ -64,9 +64,7 @@ void registerAllMetaTypes()
     qRegisterMetaType<Direction>("Direction");
     qRegisterMetaType<Difficulty>("Difficulty");
     qRegisterMetaType<Input>("Input");
-
     qRegisterMetaType<LocatedTxKernel>("LocatedTxKernel");
-
     qRegisterMetaType<MerkleProof>("MerkleProof");
     qRegisterMetaType<NodeVersion>("NodeVersion");
     qRegisterMetaType<OutputIdentifier>("OutputIdentifier");
@@ -95,74 +93,79 @@ void registerAllMetaTypes()
 
     qRegisterMetaType<QList<PoolEntry> >("QList<PoolEntry>");
     qRegisterMetaType<QList<PeerData> >("QList<PeerData>");
-    qRegisterMetaType<PeerAddr>("PeerAddr");
 }
 
 /**
- * @brief qMain
- * @param argc
- * @param argv
- * @return
+ * @brief main
  */
 int main(int argc, char *argv[])
 {
-    // -----------------------------------------------------------------------------------------------------------------------
-    // Variables
-    // -----------------------------------------------------------------------------------------------------------------------
-    QString ownerUrl;
-    QString foreignUrl;
-    QString network;
-    QString port;
-    QString controllerBase = QString::fromUtf8(qgetenv("CONTROLLER_URL"));
+    // ------------------------------------------------------------------------------------
+    // Qt-App
+    // ------------------------------------------------------------------------------------
+    QGuiApplication app(argc, argv);
+    QQuickStyle::setStyle("Fusion");
+    app.setWindowIcon(QIcon(":/res/media/grin-node/logo.png"));
 
+    // ------------------------------------------------------------------------------------
+    // Meta-Typen & QML-Typen
+    // ------------------------------------------------------------------------------------
+    registerAllMetaTypes();
+    qmlRegisterType<GeoLookup>("Geo", 1, 0, "GeoLookup");
+
+    // ------------------------------------------------------------------------------------
+    // Controller-Basis-URL bestimmen
+    // ------------------------------------------------------------------------------------
+    QString controllerBase = QString::fromUtf8(qgetenv("CONTROLLER_URL"));
     if (controllerBase.isEmpty()) {
-        controllerBase = "http://controller:8080";
+        controllerBase = QString::fromUtf8(qgetenv("GRIN_NODE_CONTROLLER_URL"));
+    }
+
+#ifdef Q_OS_WASM
+    // Im Browser immer über den Reverse Proxy (/api/) gehen
+    if (controllerBase.isEmpty()) {
+        controllerBase = QStringLiteral("/api/");
+    }
+#else
+    // Desktop-Default: lokaler Controller
+    if (controllerBase.isEmpty()) {
+        controllerBase = QStringLiteral("http://127.0.0.1:8080/");
+    }
+#endif
+
+    if (!controllerBase.endsWith(QLatin1Char('/'))) {
+        controllerBase.append(QLatin1Char('/'));
     }
 
     QUrl controllerBaseUrl(controllerBase);
     if (!controllerBaseUrl.isValid()) {
-        controllerBaseUrl = QUrl("http://controller:8080");
+#ifdef Q_OS_WASM
+        controllerBaseUrl = QUrl(QStringLiteral("/api/"));
+#else
+        controllerBaseUrl = QUrl(QStringLiteral("http://127.0.0.1:8080/"));
+#endif
     }
 
-    network = "main"; // main or test
-    port = "8080"; // main = 3413 or test = 13413
+    // v2/owner & v2/foreign darauf aufbauen
+    const QString ownerUrl  = controllerBaseUrl.resolved(QUrl(QStringLiteral("v2/owner"))).toString();
+    const QString foreignUrl = controllerBaseUrl.resolved(QUrl(QStringLiteral("v2/foreign"))).toString();
 
-    // -----------------------------------------------------------------------------------------------------------------------
-    // App configuration
-    // -----------------------------------------------------------------------------------------------------------------------
-    QGuiApplication app(argc, argv);
-    QQuickStyle::setStyle("Fusion");   // oder "Basic", "Material", "Imagine"
-    app.setWindowIcon(QIcon(":/res/media/grin-node/logo.png"));
-
-    // -----------------------------------------------------------------------------------------------------------------------
-    // Registration
-    // -----------------------------------------------------------------------------------------------------------------------
-    registerAllMetaTypes();
-    qmlRegisterType<GeoLookup>("Geo", 1, 0, "GeoLookup");
-
-    // -----------------------------------------------------------------------------------------------------------------------
-    // API configuration
-    // -----------------------------------------------------------------------------------------------------------------------
-    ownerUrl = controllerBaseUrl.resolved(QUrl(QStringLiteral("v2/owner"))).toString();
-    foreignUrl = controllerBaseUrl.resolved(QUrl(QStringLiteral("v2/foreign"))).toString();
-
-    // Node Owner Api Instance
-    NodeOwnerApi *nodeOwnerApi = new NodeOwnerApi(ownerUrl, QString());
-
-    // Node Foreign Api Instance
+    // ------------------------------------------------------------------------------------
+    // API-Instanzen
+    // ------------------------------------------------------------------------------------
+    NodeOwnerApi  *nodeOwnerApi  = new NodeOwnerApi(ownerUrl, QString(), &app);
     NodeForeignApi *nodeForeignApi = new NodeForeignApi(foreignUrl, QString());
 
-    // -----------------------------------------------------------------------------------------------------------------------
-    // Start qml engine
-    // -----------------------------------------------------------------------------------------------------------------------
+    // ------------------------------------------------------------------------------------
+    // QML-Engine
+    // ------------------------------------------------------------------------------------
     QQmlApplicationEngine engine;
-    // qml context objects
+
+    // Kontext-Properties
     engine.rootContext()->setContextProperty("nodeForeignApi", nodeForeignApi);
     engine.rootContext()->setContextProperty("nodeOwnerApi", nodeOwnerApi);
 
     Config config;
-    // config.loadFromNetwork(network);     // lädt ~/.grin/main/grin-server.toml
-
     engine.rootContext()->setContextProperty("config", &config);
     engine.rootContext()->setContextProperty("controllerBaseUrl", controllerBaseUrl);
 

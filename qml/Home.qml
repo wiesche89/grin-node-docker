@@ -1,22 +1,45 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
-import Grin 1.0   // qmlRegisterType<GrinNodeManager>("Grin", 1, 0, "GrinNodeManager")
+import Grin 1.0   // GrinNodeManager
 
 Item {
     id: homeRoot
     Layout.fillWidth: true
     Layout.fillHeight: true
-    property url controllerApiUrl: controllerBaseUrl !== undefined && controllerBaseUrl !== null ? controllerBaseUrl : "http://controller:8080"
+
+    // Basis-URL für den Controller:
+    // - im WASM-Build: /api/  (wird von Nginx zum Controller proxied)
+    // - Desktop:       http://127.0.0.1:8080/
+    property url controllerApiUrl: {
+        var base = ""
+
+        if (typeof controllerBaseUrl !== "undefined" && controllerBaseUrl !== null) {
+            base = controllerBaseUrl.toString()
+        }
+
+        if (base === "") {
+            if (Qt.platform.os === "wasm" || Qt.platform.os === "wasm-emscripten")
+                base = "/api/"
+            else
+                base = "http://127.0.0.1:8080/"
+        }
+
+        if (!base.endsWith("/"))
+            base += "/"
+
+        return base
+    }
 
     // ---------------------------------------------
     // STATE VARS
     // ---------------------------------------------
     property bool isBooting: false
     property string currentNodeKind: "none"   // "none" | "rust" | "grinpp"
-    property string nodeState: "none"  // "none" | "rustStarting" | "grinppStarting" | "rust" | "grinpp"
+    property string nodeState: "none"        // "none" | "rustStarting" | "grinppStarting" | "rust" | "grinpp"
     property bool nodeRunning: isRustRunning() || isGrinppRunning()
     property bool controllerError: false
+
     function isRustRunning()   { return nodeState === "rust"; }
     function isGrinppRunning() { return nodeState === "grinpp"; }
     function isStarting()      { return nodeState === "rustStarting" || nodeState === "grinppStarting"; }
@@ -26,79 +49,79 @@ Item {
     // ---------------------------------------------
     GrinNodeManager {
         id: mgr
-        baseUrl: controllerApiUrl
+        baseUrl: controllerApiUrl    // z.B. "/api/" oder "http://127.0.0.1:8080/"
         username: ""
         password: ""
 
-        onNodeStarted: (kind) => {
-            console.log("QML: nodeStarted signal received, kind=", kind);
-            nodeState = (kind === GrinNodeManager.Rust) ? "rust" : "grinpp";
-            bootTimer.restart();           // deine 10s Wartezeit
-            controllerError = false;
+        onNodeStarted: function(kind) {
+            console.log("QML: nodeStarted signal received, kind=", kind)
+            homeRoot.nodeState = (kind === GrinNodeManager.Rust) ? "rust" : "grinpp"
+            bootTimer.restart()
+            controllerError = false
         }
-        onNodeRestarted: (kind) => {
-            nodeState = (kind === GrinNodeManager.Rust) ? "rust" : "grinpp";
-            bootTimer.restart();
-            controllerError = false;
+
+        onNodeRestarted: function(kind) {
+            homeRoot.nodeState = (kind === GrinNodeManager.Rust) ? "rust" : "grinpp"
+            bootTimer.restart()
+            controllerError = false
         }
-        onNodeStopped: (kind) => {
-            nodeState = "none";
-            if (nodeOwnerApi) {
-                if (typeof nodeOwnerApi.stopStatusPolling === "function") nodeOwnerApi.stopStatusPolling();
-                if (typeof nodeOwnerApi.stopConnectedPeersPolling === "function") nodeOwnerApi.stopConnectedPeersPolling();
+
+        onNodeStopped: function(kind) {
+            homeRoot.nodeState = "none"
+            if (typeof nodeOwnerApi !== "undefined" && nodeOwnerApi) {
+                if (typeof nodeOwnerApi.stopStatusPolling === "function")
+                    nodeOwnerApi.stopStatusPolling()
+                if (typeof nodeOwnerApi.stopConnectedPeersPolling === "function")
+                    nodeOwnerApi.stopConnectedPeersPolling()
             }
         }
-        onErrorOccurred: (msg) => {
-            console.log("QML: errorOccurred", msg);
-            controllerError = true;
-            if (nodeState === "rustStarting" || nodeState === "grinppStarting")
-                nodeState = "none";
+
+        onErrorOccurred: function(msg) {
+            console.log("QML: errorOccurred", msg)
+            controllerError = true
+            if (homeRoot.nodeState === "rustStarting" || homeRoot.nodeState === "grinppStarting")
+                homeRoot.nodeState = "none"
         }
 
         onLastResponseChanged: {
             responseField.text = mgr.lastResponse
 
             if (!mgr.lastResponse || mgr.lastResponse === "")
-                return;
+                return
 
             try {
-                var obj = JSON.parse(mgr.lastResponse);
+                var obj = JSON.parse(mgr.lastResponse)
 
                 if (obj && obj.status && typeof obj.status === "object") {
-                    var st = obj.status;
-                    var running = st.running === true;
-                    var id = st.id || "";
+                    var st = obj.status
+                    var running = st.running === true
+                    var id = st.id || ""
 
                     if (running) {
-                        // --- STATE UPDATE ---
                         if (id === "rust")
-                            homeRoot.nodeState = "rust";
+                            homeRoot.nodeState = "rust"
                         else if (id === "grinpp")
-                            homeRoot.nodeState = "grinpp";
-                        controllerError = false;
+                            homeRoot.nodeState = "grinpp"
 
-                        // --- BOOT TIMER STARTEN ---
+                        controllerError = false
+
                         if (!bootTimer.running) {
-                            console.log("BootTimer gestartet über lastResponse");
-                            bootTimer.restart();
+                            console.log("BootTimer gestartet über lastResponse")
+                            bootTimer.restart()
                         }
-
                     } else {
-                        // Node wurde gestoppt
                         if (homeRoot.nodeState === "rust" || homeRoot.nodeState === "grinpp")
-                            homeRoot.nodeState = "none";
+                            homeRoot.nodeState = "none"
                     }
                 }
             } catch (e) {
-                console.log("Failed to parse mgr.lastResponse:", e, mgr.lastResponse);
+                console.log("Failed to parse mgr.lastResponse:", e, mgr.lastResponse)
             }
         }
-
-
     }
 
     // ---------------------------------------------
-    // Boot Timer (10s) -> Polling start
+    // Boot Timer (10s) -> Status & Peers Polling
     // ---------------------------------------------
     Timer {
         id: bootTimer
@@ -107,7 +130,7 @@ Item {
         onTriggered: {
             isBooting = false
             if (homeRoot.nodeState === "rust" || homeRoot.nodeState === "grinpp") {
-                if (typeof nodeOwnerApi !== "undefined") {
+                if (typeof nodeOwnerApi !== "undefined" && nodeOwnerApi) {
                     nodeOwnerApi.startStatusPolling && nodeOwnerApi.startStatusPolling(10000)
                     nodeOwnerApi.startConnectedPeersPolling && nodeOwnerApi.startConnectedPeersPolling(5000)
                 }
@@ -118,7 +141,7 @@ Item {
     }
 
     // ---------------------------------------------
-    // Custom Dark Components
+    // Dark Button-Komponente
     // ---------------------------------------------
     Component {
         id: darkButtonComponent
@@ -168,14 +191,11 @@ Item {
             Item { Layout.fillWidth: true }
         }
 
-        // (Hinweis: Die frühere Header-Sync-UI wurde entfernt)
-
         // BUTTONS + RESPONSE
         ColumnLayout {
             Layout.fillWidth: true
             spacing: 10
 
-            // ---------------- Buttons ----------------
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 8
@@ -185,21 +205,25 @@ Item {
                     id: startRustBtn
                     sourceComponent: darkButtonComponent
                     onLoaded: {
-                        if (!startRustBtn.item) return;
-                        startRustBtn.item.text = (homeRoot.nodeState === "rustStarting") ? "Starting Rust Node…" : "Start Rust Node";
-                        startRustBtn.item.enabled = (homeRoot.nodeState === "none");
+                        if (!startRustBtn.item) return
+                        startRustBtn.item.text = (homeRoot.nodeState === "rustStarting")
+                                ? "Starting Rust Node…"
+                                : "Start Rust Node"
+                        startRustBtn.item.enabled = (homeRoot.nodeState === "none")
                         startRustBtn.item.clicked.connect(function () {
-                            if (homeRoot.nodeState !== "none") return;
-                            homeRoot.nodeState = "rustStarting";
-                            mgr.startRust([]);
-                        });
+                            if (homeRoot.nodeState !== "none") return
+                            homeRoot.nodeState = "rustStarting"
+                            mgr.startRust([])
+                        })
                     }
                     Connections {
                         target: homeRoot
                         function onNodeStateChanged() {
-                            if (!startRustBtn.item) return;
-                            startRustBtn.item.text = (homeRoot.nodeState === "rustStarting") ? "Starting Rust Node…" : "Start Rust Node";
-                            startRustBtn.item.enabled = (homeRoot.nodeState === "none");
+                            if (!startRustBtn.item) return
+                            startRustBtn.item.text = (homeRoot.nodeState === "rustStarting")
+                                    ? "Starting Rust Node…"
+                                    : "Start Rust Node"
+                            startRustBtn.item.enabled = (homeRoot.nodeState === "none")
                         }
                     }
                 }
@@ -209,16 +233,16 @@ Item {
                     id: restartRustBtn
                     sourceComponent: darkButtonComponent
                     onLoaded: {
-                        if (!restartRustBtn.item) return;
-                        restartRustBtn.item.text = "Restart Rust Node";
-                        restartRustBtn.item.enabled = (homeRoot.nodeState === "rust");
-                        restartRustBtn.item.clicked.connect(function(){ mgr.restartRust([]); });
+                        if (!restartRustBtn.item) return
+                        restartRustBtn.item.text = "Restart Rust Node"
+                        restartRustBtn.item.enabled = (homeRoot.nodeState === "rust")
+                        restartRustBtn.item.clicked.connect(function () { mgr.restartRust([]) })
                     }
                     Connections {
                         target: homeRoot
                         function onNodeStateChanged() {
-                            if (!restartRustBtn.item) return;
-                            restartRustBtn.item.enabled = (homeRoot.nodeState === "rust");
+                            if (!restartRustBtn.item) return
+                            restartRustBtn.item.enabled = (homeRoot.nodeState === "rust")
                         }
                     }
                 }
@@ -228,16 +252,16 @@ Item {
                     id: stopRustBtn
                     sourceComponent: darkButtonComponent
                     onLoaded: {
-                        if (!stopRustBtn.item) return;
-                        stopRustBtn.item.text = "Stop Rust Node";
-                        stopRustBtn.item.enabled = (homeRoot.nodeState === "rust");
-                        stopRustBtn.item.clicked.connect(function(){ mgr.stopRust(); });
+                        if (!stopRustBtn.item) return
+                        stopRustBtn.item.text = "Stop Rust Node"
+                        stopRustBtn.item.enabled = (homeRoot.nodeState === "rust")
+                        stopRustBtn.item.clicked.connect(function () { mgr.stopRust() })
                     }
                     Connections {
                         target: homeRoot
                         function onNodeStateChanged() {
-                            if (!stopRustBtn.item) return;
-                            stopRustBtn.item.enabled = (homeRoot.nodeState === "rust");
+                            if (!stopRustBtn.item) return
+                            stopRustBtn.item.enabled = (homeRoot.nodeState === "rust")
                         }
                     }
                 }
@@ -247,21 +271,25 @@ Item {
                     id: startGrinppBtn
                     sourceComponent: darkButtonComponent
                     onLoaded: {
-                        if (!startGrinppBtn.item) return;
-                        startGrinppBtn.item.text = (homeRoot.nodeState === "grinppStarting") ? "Starting Grin++ Node…" : "Start Grin++ Node";
-                        startGrinppBtn.item.enabled = (homeRoot.nodeState === "none");
+                        if (!startGrinppBtn.item) return
+                        startGrinppBtn.item.text = (homeRoot.nodeState === "grinppStarting")
+                                ? "Starting Grin++ Node…"
+                                : "Start Grin++ Node"
+                        startGrinppBtn.item.enabled = (homeRoot.nodeState === "none")
                         startGrinppBtn.item.clicked.connect(function () {
-                            if (homeRoot.nodeState !== "none") return;
-                            homeRoot.nodeState = "grinppStarting";
-                            mgr.startGrinPP([]);
-                        });
+                            if (homeRoot.nodeState !== "none") return
+                            homeRoot.nodeState = "grinppStarting"
+                            mgr.startGrinPP([])
+                        })
                     }
                     Connections {
                         target: homeRoot
                         function onNodeStateChanged() {
-                            if (!startGrinppBtn.item) return;
-                            startGrinppBtn.item.text = (homeRoot.nodeState === "grinppStarting") ? "Starting Grin++ Node…" : "Start Grin++ Node";
-                            startGrinppBtn.item.enabled = (homeRoot.nodeState === "none");
+                            if (!startGrinppBtn.item) return
+                            startGrinppBtn.item.text = (homeRoot.nodeState === "grinppStarting")
+                                    ? "Starting Grin++ Node…"
+                                    : "Start Grin++ Node"
+                            startGrinppBtn.item.enabled = (homeRoot.nodeState === "none")
                         }
                     }
                 }
@@ -271,16 +299,16 @@ Item {
                     id: restartGrinppBtn
                     sourceComponent: darkButtonComponent
                     onLoaded: {
-                        if (!restartGrinppBtn.item) return;
-                        restartGrinppBtn.item.text = "Restart Grin++ Node";
-                        restartGrinppBtn.item.enabled = (homeRoot.nodeState === "grinpp");
-                        restartGrinppBtn.item.clicked.connect(function(){ mgr.restartGrinPP([]); });
+                        if (!restartGrinppBtn.item) return
+                        restartGrinppBtn.item.text = "Restart Grin++ Node"
+                        restartGrinppBtn.item.enabled = (homeRoot.nodeState === "grinpp")
+                        restartGrinppBtn.item.clicked.connect(function () { mgr.restartGrinPP([]) })
                     }
                     Connections {
                         target: homeRoot
                         function onNodeStateChanged() {
-                            if (!restartGrinppBtn.item) return;
-                            restartGrinppBtn.item.enabled = (homeRoot.nodeState === "grinpp");
+                            if (!restartGrinppBtn.item) return
+                            restartGrinppBtn.item.enabled = (homeRoot.nodeState === "grinpp")
                         }
                     }
                 }
@@ -290,16 +318,16 @@ Item {
                     id: stopGrinppBtn
                     sourceComponent: darkButtonComponent
                     onLoaded: {
-                        if (!stopGrinppBtn.item) return;
-                        stopGrinppBtn.item.text = "Stop Grin++ Node";
-                        stopGrinppBtn.item.enabled = (homeRoot.nodeState === "grinpp");
-                        stopGrinppBtn.item.clicked.connect(function(){ mgr.stopGrinPP(); });
+                        if (!stopGrinppBtn.item) return
+                        stopGrinppBtn.item.text = "Stop Grin++ Node"
+                        stopGrinppBtn.item.enabled = (homeRoot.nodeState === "grinpp")
+                        stopGrinppBtn.item.clicked.connect(function () { mgr.stopGrinPP() })
                     }
                     Connections {
                         target: homeRoot
                         function onNodeStateChanged() {
-                            if (!stopGrinppBtn.item) return;
-                            stopGrinppBtn.item.enabled = (homeRoot.nodeState === "grinpp");
+                            if (!stopGrinppBtn.item) return
+                            stopGrinppBtn.item.enabled = (homeRoot.nodeState === "grinpp")
                         }
                     }
                 }
@@ -307,7 +335,7 @@ Item {
                 Item { Layout.fillWidth: true }
             }
 
-            // ---------------- Response-Feld ----------------
+            // Response-Log
             ScrollView {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 160
@@ -354,7 +382,6 @@ Item {
                     background: null
                 }
             }
-
         }
 
         // STATUS + PEERS
@@ -369,6 +396,9 @@ Item {
         }
     }
 
+    // ---------------------------------------------
+    // Fehler-Overlay (Controller nicht erreichbar)
+    // ---------------------------------------------
     Rectangle {
         id: controllerErrorOverlay
         width: parent ? parent.width * 0.6 : 400

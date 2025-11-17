@@ -88,7 +88,7 @@ void GrinNodeManager::getLogsGrinPP(int n)
 // ---------- Public API ----------
 void GrinNodeManager::getStatus()
 {
-    QNetworkRequest req = makeRequest("/status");
+    QNetworkRequest req = makeRequest("status");
     m_net->get(req);
 }
 
@@ -109,7 +109,7 @@ void GrinNodeManager::stopStatusPolling()
 // ---------- Core helpers ----------
 void GrinNodeManager::start(NodeKind kind, const QStringList &args)
 {
-    QNetworkRequest req = makeRequest("/start/" + kindToPath(kind));
+    QNetworkRequest req = makeRequest("start/" + kindToPath(kind));
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
 
     QJsonObject json;
@@ -122,13 +122,13 @@ void GrinNodeManager::start(NodeKind kind, const QStringList &args)
 
 void GrinNodeManager::stop(NodeKind kind)
 {
-    QNetworkRequest req = makeRequest("/stop/" + kindToPath(kind));
+    QNetworkRequest req = makeRequest("stop/" + kindToPath(kind));
     m_net->post(req, QByteArray());
 }
 
 void GrinNodeManager::restart(NodeKind kind, const QStringList &args)
 {
-    QNetworkRequest req = makeRequest("/restart/" + kindToPath(kind));
+    QNetworkRequest req = makeRequest("restart/" + kindToPath(kind));
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
 
     QJsonObject json;
@@ -141,14 +141,41 @@ void GrinNodeManager::restart(NodeKind kind, const QStringList &args)
 
 void GrinNodeManager::getLogs(NodeKind kind, int n)
 {
-    QNetworkRequest req = makeRequest("/logs/" + kindToPath(kind) + "?n=" + QString::number(n));
+    // Query-String direkt an den relativen Pfad hängen
+    QNetworkRequest req = makeRequest(QString("logs/%1?n=%2")
+                                          .arg(kindToPath(kind))
+                                          .arg(n));
     m_net->get(req);
 }
 
 // ---------- Utils ----------
+
+// kleine Hilfsfunktion, um aus m_baseUrl + relativem Pfad
+// eine echte URL zu bauen (ohne den Basis-Pfad zu überschreiben)
 QNetworkRequest GrinNodeManager::makeRequest(const QString &path) const
 {
-    QUrl url = m_baseUrl.resolved(QUrl(path));
+    QString rel = path;
+
+    // WICHTIG: führenden Slash entfernen, sonst überschreibt
+    // QUrl::resolved() den Pfad der baseUrl statt anzuhängen.
+    if (rel.startsWith('/'))
+        rel.remove(0, 1);
+
+    QUrl relUrl;
+    relUrl.setPath(rel);
+
+    QUrl base = m_baseUrl;
+    if (!base.isValid() || base.isEmpty()) {
+        // Fallback: relative URL
+        base = QUrl(QStringLiteral("/"));
+    }
+
+    QUrl url = base.resolved(relUrl);
+
+    // Debug zum Überprüfen im Log
+    // qDebug() << "[GrinNodeManager] makeRequest base=" << base
+    //          << "rel=" << rel << "->" << url;
+
     QNetworkRequest req(url);
     req.setRawHeader("User-Agent", m_opts.userAgent);
     if (!m_opts.username.isEmpty()) {
@@ -170,10 +197,24 @@ QString GrinNodeManager::kindToPath(NodeKind kind) const
 
 void GrinNodeManager::setBaseUrl(const QUrl &u)
 {
-    if (u == m_baseUrl) {
+    QUrl fixed = u;
+
+    // Wenn Pfad leer ist, "/" setzen
+    if (fixed.path().isEmpty())
+        fixed.setPath("/");
+
+    // Pfad immer mit "/" enden lassen, damit resolved() sauber arbeitet
+    QString p = fixed.path();
+    if (!p.endsWith('/')) {
+        p.append('/');
+        fixed.setPath(p);
+    }
+
+    if (fixed == m_baseUrl) {
         return;
     }
-    m_baseUrl = u;
+
+    m_baseUrl = fixed;
     emit baseUrlChanged();
 }
 
@@ -185,12 +226,12 @@ void GrinNodeManager::onReplyFinished(QNetworkReply *reply)
     const QByteArray payload = reply->readAll();
 
     auto finish = [&] {
-                      const QString pretty = safePretty(payload);
-                      if (pretty != m_lastResponse) {
-                          m_lastResponse = pretty;
-                          emit lastResponseChanged();
-                      }
-                  };
+        const QString pretty = safePretty(payload);
+        if (pretty != m_lastResponse) {
+            m_lastResponse = pretty;
+            emit lastResponseChanged();
+        }
+    };
 
     if (reply->error() != QNetworkReply::NoError) {
         emit errorOccurred(QString("[%1] %2").arg(url.toString(), reply->errorString()));
