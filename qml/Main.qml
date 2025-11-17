@@ -96,8 +96,16 @@ ApplicationWindow {
                     // nur laden/aktualisieren, wenn Node wirklich läuft
                     nodeRunning: homePage.nodeRunning
                 }
-                Transaction { Layout.fillWidth: true; Layout.fillHeight: true }
-                Chain       { Layout.fillWidth: true; Layout.fillHeight: true }
+                Transaction {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    nodeRunning: homePage.nodeRunning
+                }
+                Chain {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    nodeRunning: homePage.nodeRunning
+                }
             }
         }
     }

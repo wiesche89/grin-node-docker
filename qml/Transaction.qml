@@ -6,6 +6,7 @@ Item {
     id: root
     Layout.fillWidth: true
     Layout.fillHeight: true
+    property bool nodeRunning: false
 
     // In main.cpp gesetzt: engine.rootContext()->setContextProperty("nodeForeignApi", api);
     readonly property var foreignApi: nodeForeignApi
@@ -94,14 +95,19 @@ Item {
         id: pollTimer
         interval: refreshIntervalMs
         repeat: true
-        running: !!foreignApi
-        onTriggered: refreshAll()
+        running: nodeRunning && !!foreignApi
+        onTriggered: if (nodeRunning) refreshAll()
     }
 
-    Component.onCompleted: refreshAll()
+    Component.onCompleted: if (nodeRunning) refreshAll()
     onForeignApiChanged: {
-        pollTimer.running = !!foreignApi
-        if (foreignApi) refreshAll()
+        pollTimer.running = nodeRunning && !!foreignApi
+        if (foreignApi && nodeRunning) refreshAll()
+    }
+
+    onNodeRunningChanged: {
+        pollTimer.running = nodeRunning && !!foreignApi
+        if (nodeRunning && foreignApi) refreshAll()
     }
 
     // ---------------- Signale der Foreign API ----------------
@@ -158,6 +164,7 @@ Item {
     // ---------------------------------------------
     ColumnLayout {
         anchors.fill: parent
+        property bool nodeRunning: false
         anchors.margins: 20
         spacing: 16
 

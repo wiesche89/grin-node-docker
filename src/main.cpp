@@ -113,6 +113,16 @@ int main(int argc, char *argv[])
     QString foreignUrl;
     QString network;
     QString port;
+    QString controllerBase = QString::fromUtf8(qgetenv("CONTROLLER_URL"));
+
+    if (controllerBase.isEmpty()) {
+        controllerBase = "http://controller:8080";
+    }
+
+    QUrl controllerBaseUrl(controllerBase);
+    if (!controllerBaseUrl.isValid()) {
+        controllerBaseUrl = QUrl("http://controller:8080");
+    }
 
     network = "main"; // main or test
     port = "8080"; // main = 3413 or test = 13413
@@ -133,8 +143,8 @@ int main(int argc, char *argv[])
     // -----------------------------------------------------------------------------------------------------------------------
     // API configuration
     // -----------------------------------------------------------------------------------------------------------------------
-    ownerUrl = QString("http://controller:%1/v2/owner").arg(port);
-    foreignUrl = QString("http://controller:%1/v2/foreign").arg(port);
+    ownerUrl = controllerBaseUrl.resolved(QUrl(QStringLiteral("v2/owner"))).toString();
+    foreignUrl = controllerBaseUrl.resolved(QUrl(QStringLiteral("v2/foreign"))).toString();
 
     // Node Owner Api Instance
     NodeOwnerApi *nodeOwnerApi = new NodeOwnerApi(ownerUrl, QString());
@@ -151,9 +161,10 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty("nodeOwnerApi", nodeOwnerApi);
 
     Config config;
-    config.loadFromNetwork(network);     // lädt ~/.grin/main/grin-server.toml
+    // config.loadFromNetwork(network);     // lädt ~/.grin/main/grin-server.toml
 
     engine.rootContext()->setContextProperty("config", &config);
+    engine.rootContext()->setContextProperty("controllerBaseUrl", controllerBaseUrl);
 
     engine.load(QUrl(QStringLiteral("qrc:/qml/qml/Main.qml")));
     if (engine.rootObjects().isEmpty()) {

@@ -6,6 +6,7 @@ Item {
     id: root
     Layout.fillWidth: true
     Layout.fillHeight: true
+    property bool nodeRunning: false
 
     // ---------- API ----------
     readonly property var foreignApi: nodeForeignApi
@@ -122,16 +123,21 @@ Item {
     }
 
     // ---------- Lifecycle ----------
-    Component.onCompleted: refreshTip()
-    onForeignApiChanged: if (foreignApi) refreshTip()
+    Component.onCompleted: if (nodeRunning && foreignApi) refreshTip()
+    onForeignApiChanged: if (foreignApi && nodeRunning) refreshTip()
 
     // ---------- Auto-Refresh ----------
     Timer {
         id: autoTimer
         interval: refreshIntervalMs
         repeat: true
-        running: autoRefresh
-        onTriggered: refreshTip()
+        running: autoRefresh && nodeRunning && !!foreignApi
+        onTriggered: if (nodeRunning) refreshTip()
+    }
+
+    onNodeRunningChanged: {
+        autoTimer.running = autoRefresh && nodeRunning && !!foreignApi
+        if (nodeRunning && foreignApi) refreshTip()
     }
 
     // ---------- Signals ----------
@@ -210,7 +216,7 @@ Item {
             // ---- Auto-Refresh Switch + Text (statt CheckBox/Buttons/Feld) ----
             Row {
                 spacing: 8
-                anchors.verticalCenter: parent.verticalCenter
+                Layout.alignment: Qt.AlignVCenter
 
                 Switch {
                     id: autoSw

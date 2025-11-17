@@ -7,6 +7,7 @@ Item {
     id: homeRoot
     Layout.fillWidth: true
     Layout.fillHeight: true
+    property url controllerApiUrl: controllerBaseUrl !== undefined && controllerBaseUrl !== null ? controllerBaseUrl : "http://controller:8080"
 
     // ---------------------------------------------
     // STATE VARS
@@ -15,6 +16,7 @@ Item {
     property string currentNodeKind: "none"   // "none" | "rust" | "grinpp"
     property string nodeState: "none"  // "none" | "rustStarting" | "grinppStarting" | "rust" | "grinpp"
     property bool nodeRunning: isRustRunning() || isGrinppRunning()
+    property bool controllerError: false
     function isRustRunning()   { return nodeState === "rust"; }
     function isGrinppRunning() { return nodeState === "grinpp"; }
     function isStarting()      { return nodeState === "rustStarting" || nodeState === "grinppStarting"; }
@@ -24,7 +26,7 @@ Item {
     // ---------------------------------------------
     GrinNodeManager {
         id: mgr
-        baseUrl: "http://controller:8080"
+        baseUrl: controllerApiUrl
         username: ""
         password: ""
 
@@ -32,10 +34,12 @@ Item {
             console.log("QML: nodeStarted signal received, kind=", kind);
             nodeState = (kind === GrinNodeManager.Rust) ? "rust" : "grinpp";
             bootTimer.restart();           // deine 10s Wartezeit
+            controllerError = false;
         }
         onNodeRestarted: (kind) => {
             nodeState = (kind === GrinNodeManager.Rust) ? "rust" : "grinpp";
             bootTimer.restart();
+            controllerError = false;
         }
         onNodeStopped: (kind) => {
             nodeState = "none";
@@ -46,6 +50,7 @@ Item {
         }
         onErrorOccurred: (msg) => {
             console.log("QML: errorOccurred", msg);
+            controllerError = true;
             if (nodeState === "rustStarting" || nodeState === "grinppStarting")
                 nodeState = "none";
         }
@@ -70,6 +75,7 @@ Item {
                             homeRoot.nodeState = "rust";
                         else if (id === "grinpp")
                             homeRoot.nodeState = "grinpp";
+                        controllerError = false;
 
                         // --- BOOT TIMER STARTEN ---
                         if (!bootTimer.running) {
@@ -100,9 +106,13 @@ Item {
         repeat: false
         onTriggered: {
             isBooting = false
-            if (typeof nodeOwnerApi !== "undefined") {
-                nodeOwnerApi.startStatusPolling && nodeOwnerApi.startStatusPolling(10000)
-                nodeOwnerApi.startConnectedPeersPolling && nodeOwnerApi.startConnectedPeersPolling(5000)
+            if (homeRoot.nodeState === "rust" || homeRoot.nodeState === "grinpp") {
+                if (typeof nodeOwnerApi !== "undefined") {
+                    nodeOwnerApi.startStatusPolling && nodeOwnerApi.startStatusPolling(10000)
+                    nodeOwnerApi.startConnectedPeersPolling && nodeOwnerApi.startConnectedPeersPolling(5000)
+                }
+            } else {
+                console.log("BootTimer skipped because no node is running")
             }
         }
     }
@@ -356,6 +366,63 @@ Item {
         PeerListView {
             Layout.fillWidth: true
             Layout.fillHeight: true
+        }
+    }
+
+    Rectangle {
+        id: controllerErrorOverlay
+        width: parent ? parent.width * 0.6 : 400
+        height: 140
+        anchors.horizontalCenter: parent ? parent.horizontalCenter : undefined
+        anchors.bottom: parent ? parent.bottom : undefined
+        anchors.bottomMargin: 20
+        color: "#050000"
+        visible: controllerError
+        z: 99
+        opacity: 0.85
+        radius: 12
+        border.color: "#660000"
+        border.width: 1
+
+        Column {
+            anchors.fill: parent
+            anchors.margins: 16
+            spacing: 8
+            anchors.horizontalCenter: parent.horizontalCenter
+
+            Text {
+                text: "Controller-API not available"
+                color: "white"
+                font.pixelSize: 18
+                wrapMode: Text.Wrap
+                anchors.horizontalCenter: parent.horizontalCenter
+            }
+
+            Text {
+                text: "Retry if Controller-Api runs"
+                color: "#ccc"
+                font.pixelSize: 13
+                wrapMode: Text.Wrap
+                anchors.horizontalCenter: parent.horizontalCenter
+            }
+
+            Row {
+                anchors.horizontalCenter: parent.horizontalCenter
+                spacing: 12
+
+                Button {
+                    text: "Erneut verbinden"
+                    onClicked: {
+                        controllerError = false
+                        mgr.getStatus()
+                    }
+                }
+
+                Button {
+                    text: "Ignorieren"
+                    onClicked: controllerError = false
+                }
+            }
         }
     }
 }
