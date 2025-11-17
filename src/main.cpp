@@ -133,8 +133,8 @@ int main(int argc, char *argv[])
     // -----------------------------------------------------------------------------------------------------------------------
     // API configuration
     // -----------------------------------------------------------------------------------------------------------------------
-    ownerUrl = QString("http://controller:%1/v2/owner").arg(port);
-    foreignUrl = QString("http://controller:%1/v2/foreign").arg(port);
+    ownerUrl = QString("http://localhost:%1/v2/owner").arg(port);
+    foreignUrl = QString("http://localhost:%1/v2/foreign").arg(port);
 
     // Node Owner Api Instance
     NodeOwnerApi *nodeOwnerApi = new NodeOwnerApi(ownerUrl, QString());
