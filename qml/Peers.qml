@@ -1,4 +1,4 @@
-// Peers.qml
+﻿// Peers.qml
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 2.15
@@ -17,6 +17,7 @@ Item {
     property bool loading: false
     property string errorText: ""
     property var uaOptions: ["All"]      // gets rebuilt dynamically from peers
+    property bool compactLayout: false
 
     // Sizes
     readonly property int kCardH: 72
@@ -178,13 +179,16 @@ Item {
     // ---------------------------------------------------
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 20
+        anchors.margins: compactLayout ? 12 : 20
         spacing: 14
 
         // Header
-        RowLayout {
+        GridLayout {
             Layout.fillWidth: true
-            spacing: 10
+            columns: compactLayout ? 1 : 2
+            columnSpacing: 10
+            rowSpacing: 6
+
             Label {
                 text: "Peers"
                 color: "white"
@@ -192,89 +196,123 @@ Item {
                 font.bold: true
                 Layout.fillWidth: true
             }
+
             Loader {
                 id: refreshBtn
+                Layout.fillWidth: compactLayout
+                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
                 sourceComponent: darkButton
                 onLoaded: {
-                    item.text = loading ? "… Loading" : "↻ Refresh"
+                    item.text = loading ? "Loading..." : "Refresh"
                     item.enabled = !loading && nodeRunning
                     item.onClicked.connect(refresh)
                 }
             }
         }
-
         // Status line
-        RowLayout {
+        GridLayout {
             Layout.fillWidth: true
-            spacing: 8
+            columns: compactLayout ? 1 : 3
+            columnSpacing: 8
+            rowSpacing: 6
+
             BusyIndicator {
                 running: loading
                 visible: loading
+                Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
                 Layout.preferredHeight: 22
                 Layout.preferredWidth: 22
             }
+
             Label {
-                text: !nodeRunning ? "Node is not running — no peers."
-                                   : (errorText.length ? errorText
-                                                       : (loading ? "Loading peers…"
-                                                                  : (filteredPeers.length + " / " + peers.length + " peers")))
+                text: !nodeRunning ? "Node is not running - no peers." : (errorText.length ? errorText : (loading ? "Loading peers..." : (filteredPeers.length + " / " + peers.length + " peers")))
                 color: !nodeRunning ? "#ffcc66" : (errorText.length ? "#ff8080" : "#aaa")
                 font.pixelSize: 13
                 Layout.fillWidth: true
             }
-            Switch { id: autoRefresh; text: "Auto"; checked: false; enabled: nodeRunning }
+
+            Switch {
+                id: autoRefresh
+                text: "Auto"
+                checked: false
+                enabled: nodeRunning
+                Layout.alignment: compactLayout ? Qt.AlignLeft : Qt.AlignRight
+            }
         }
 
         // Filters row
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 10
+        Flow {
+            id: filterFlow
+            width: parent.width
+            spacing: compactLayout ? 10 : 16
             enabled: nodeRunning
             opacity: nodeRunning ? 1.0 : 0.5
 
-            Label { text: "State:"; color: "#bbb"; font.pixelSize: 12 }
-            ComboBox {
-                id: stateFilter
-                model: ["All","Healthy","Banned","Defunct"]
-                implicitWidth: 140
-                onCurrentIndexChanged: applyFilter()
+            Column {
+                width: compactLayout ? filterFlow.width : 180
+                spacing: 4
+                Label { text: "State"; color: "#bbb"; font.pixelSize: 12 }
+                ComboBox {
+                    id: stateFilter
+                    model: ["All","Healthy","Banned","Defunct"]
+                    width: parent.width
+                    onCurrentIndexChanged: applyFilter()
+                }
             }
 
-            Label { text: "Ban:"; color: "#bbb"; font.pixelSize: 12 }
-            ComboBox {
-                id: banFilter
-                model: ["All","Banned","Unbanned"]
-                implicitWidth: 140
-                onCurrentIndexChanged: applyFilter()
+            Column {
+                width: compactLayout ? filterFlow.width : 180
+                spacing: 4
+                Label { text: "Ban"; color: "#bbb"; font.pixelSize: 12 }
+                ComboBox {
+                    id: banFilter
+                    model: ["All","Banned","Unbanned"]
+                    width: parent.width
+                    onCurrentIndexChanged: applyFilter()
+                }
             }
 
-            Label { text: "User-Agent:"; color: "#bbb"; font.pixelSize: 12 }
-            ComboBox {
-                id: uaFilter
-                model: uaOptions
-                implicitWidth: 240
-                onCurrentIndexChanged: applyFilter()
+            Column {
+                width: compactLayout ? filterFlow.width : 220
+                spacing: 4
+                Label { text: "User-Agent"; color: "#bbb"; font.pixelSize: 12 }
+                ComboBox {
+                    id: uaFilter
+                    model: uaOptions
+                    width: parent.width
+                    onCurrentIndexChanged: applyFilter()
+                }
             }
 
-            CheckBox {
-                id: uaMustExist
-                text: "Only with User-Agent"
-                onToggled: applyFilter()
+            Item {
+                width: compactLayout ? filterFlow.width : 200
+                implicitHeight: uaMustExist.implicitHeight
+                CheckBox {
+                    id: uaMustExist
+                    text: "Only with User-Agent"
+                    anchors.left: parent.left
+                    width: parent.width
+                    onToggled: applyFilter()
+                }
             }
 
-            Item { Layout.fillWidth: true }
-
-            TextField {
-                id: searchField
-                placeholderText: "Search address or User-Agent…"
-                Layout.preferredWidth: 260
-                onTextChanged: applyFilter()
+            Column {
+                width: compactLayout ? filterFlow.width : 260
+                spacing: 4
+                Label { text: "Search"; color: "#bbb"; font.pixelSize: 12 }
+                TextField {
+                    id: searchField
+                    placeholderText: "Search address or User-Agent..."
+                    width: parent.width
+                    onTextChanged: applyFilter()
+                }
             }
 
             Loader {
+                width: compactLayout ? filterFlow.width : 120
                 sourceComponent: darkButton
                 onLoaded: {
-                    item.text = "✕ Clear"
+                    item.text = "Clear"
                     item.onClicked.connect(function() {
                         stateFilter.currentIndex = 0
                         banFilter.currentIndex = 0
@@ -285,7 +323,6 @@ Item {
                 }
             }
         }
-
         // List
         ListView {
             id: list
@@ -313,7 +350,7 @@ Item {
 
             delegate: Rectangle {
                 width: list.width
-                height: root.kCardH
+                height: Math.max(root.kCardH, cardLayout.implicitHeight + root.kPad * 2)
                 radius: 8
                 color: hovered ? "#2e2e2e" : "#242424"
                 border.color: isBanned(parseFlags(modelData.flags)) ? "#8a2f2f" : "#333"
@@ -322,14 +359,18 @@ Item {
                 property bool hovered: false
                 MouseArea { anchors.fill: parent; hoverEnabled: true; onEntered: parent.hovered = true; onExited: parent.hovered = false }
 
-                RowLayout {
+                GridLayout {
+                    id: cardLayout
                     anchors.fill: parent
                     anchors.margins: root.kPad
-                    spacing: 12
+                    columns: compactLayout ? 1 : 2
+                    columnSpacing: 12
+                    rowSpacing: 6
 
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: 2
+                        Layout.columnSpan: 1
                         Label {
                             text: addrFromPeer(modelData)
                             color: "white"
@@ -361,16 +402,13 @@ Item {
                         }
                     }
 
-                    // 👇 Spacer pushes the button to the far right
-                    Item { Layout.fillWidth: true }
-
-                    // Action button pinned right
                     Loader {
                         id: actionBtn
-                        Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                        Layout.alignment: compactLayout ? (Qt.AlignLeft | Qt.AlignVCenter) : (Qt.AlignRight | Qt.AlignVCenter)
+                        Layout.fillWidth: compactLayout
                         Layout.preferredWidth: root.kBtnW
-                        Layout.minimumWidth: root.kBtnW
-                        Layout.maximumWidth: root.kBtnW
+                        Layout.minimumWidth: compactLayout ? 0 : root.kBtnW
+                        Layout.maximumWidth: compactLayout ? filterFlow.width : root.kBtnW
                         sourceComponent: darkButton
                         onLoaded: {
                             var banned = isBanned(parseFlags(modelData.flags))
@@ -386,9 +424,7 @@ Item {
                         }
                     }
                 }
-
             }
-
             // Footer (empty state for active filters)
             footer: Item {
                 width: 1
@@ -432,7 +468,7 @@ Item {
             rebuildUaOptions()
             applyFilter()
             if (refreshBtn.item) {
-                refreshBtn.item.text = "↻ Refresh"
+                refreshBtn.item.text = "â†» Refresh"
                 refreshBtn.item.enabled = nodeRunning
             }
         }
@@ -460,7 +496,7 @@ Item {
         loading = true
         errorText = ""
         if (refreshBtn.item) {
-            refreshBtn.item.text = "… Loading"
+            refreshBtn.item.text = "â€¦ Loading"
             refreshBtn.item.enabled = false
         }
         nodeOwnerApi.getPeersAsync("")
@@ -477,7 +513,7 @@ Item {
             loading = false
             errorText = ""
             if (refreshBtn.item) {
-                refreshBtn.item.text = "↻ Refresh"
+                refreshBtn.item.text = "â†» Refresh"
                 refreshBtn.item.enabled = false
             }
         }
@@ -498,3 +534,9 @@ Item {
         if (nodeRunning) refresh()
     }
 }
+
+
+
+
+
+

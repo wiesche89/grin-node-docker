@@ -1,4 +1,4 @@
-import QtQuick 2.15
+﻿import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import Grin 1.0   // GrinNodeManager
@@ -7,8 +7,9 @@ Item {
     id: homeRoot
     Layout.fillWidth: true
     Layout.fillHeight: true
+    property bool compactLayout: false
 
-    // Basis-URL für den Controller:
+    // Basis-URL fÃ¼r den Controller:
     // - im WASM-Build: /api/  (wird von Nginx zum Controller proxied)
     // - Desktop:       http://127.0.0.1:8080/
     property url controllerApiUrl: {
@@ -106,7 +107,7 @@ Item {
                         controllerError = false
 
                         if (!bootTimer.running) {
-                            console.log("BootTimer gestartet über lastResponse")
+                            console.log("BootTimer gestartet Ã¼ber lastResponse")
                             bootTimer.restart()
                         }
                     } else {
@@ -147,6 +148,9 @@ Item {
         id: darkButtonComponent
         Button {
             id: control
+            implicitHeight: 46
+            implicitWidth: 160
+            anchors.fill: parent
             property color bg: hovered ? "#3a3a3a" : "#2b2b2b"
             property color fg: enabled ? "white" : "#777"
             flat: true
@@ -169,230 +173,314 @@ Item {
         }
     }
 
-    // ---------------------------------------------
+        // ---------------------------------------------
     // Layout
     // ---------------------------------------------
-    ColumnLayout {
+    ScrollView {
+        id: homeScrollView
         anchors.fill: parent
-        anchors.margins: 20
-        spacing: 20
+        clip: true
+        ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+        ScrollBar.vertical.policy: ScrollBar.AsNeeded
 
-        // HEADER
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 20
-            Label {
-                text: "Grin Node Dashboard"
-                color: "white"
-                font.pixelSize: 28
-                font.bold: true
-                Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+        Item {
+            width: homeScrollView.width
+            implicitHeight: contentColumn.implicitHeight + 40
+            height: implicitHeight
+
+            ColumnLayout {
+                id: contentColumn
+                anchors.fill: parent
+                anchors.margins: 20
+                spacing: 20
+
+                // HEADER
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 4
+
+                    Text {
+                        text: "Grin Node Dashboard"
+                        color: "white"
+                        font.pixelSize: homeRoot.compactLayout ? 22 : 28
+                        font.bold: true
+                    }
+
+                    Text {
+                        text: "Manage and monitor both Rust and Grin++ nodes"
+                        color: "#cccccc"
+                        font.pixelSize: 14
+                        visible: !homeRoot.compactLayout
+                    }
+                }
+
+                // BUTTONS + RESPONSE
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 16
+
+                    GridLayout {
+                        id: nodeControlGrid
+                        Layout.fillWidth: true
+                        columns: homeRoot.compactLayout ? 1 : 2
+                        columnSpacing: 20
+                        rowSpacing: 20
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 8
+
+                            Text {
+                                text: "Rust Node"
+                                color: "#f0f0f0"
+                                font.pixelSize: 16
+                                font.bold: true
+                            }
+
+                            GridLayout {
+                                Layout.fillWidth: true
+                                columns: homeRoot.compactLayout ? 1 : 3
+                                columnSpacing: 8
+                                rowSpacing: 8
+
+                                Loader {
+                                    id: startRustBtn
+                                    Layout.fillWidth: true
+                                    Layout.preferredWidth: 200
+                                    Layout.preferredHeight: 52
+                                    sourceComponent: darkButtonComponent
+                                    onLoaded: {
+                                        if (!startRustBtn.item) return
+                                        startRustBtn.item.text = (homeRoot.nodeState === "rustStarting")
+                                                ? "Starting Rust Node..."
+                                                : "Start Rust Node"
+                                        startRustBtn.item.enabled = (homeRoot.nodeState === "none")
+                                        startRustBtn.item.clicked.connect(function () {
+                                            if (homeRoot.nodeState !== "none") return
+                                            homeRoot.nodeState = "rustStarting"
+                                            mgr.startRust([])
+                                        })
+                                        startRustBtn.item.width = startRustBtn.width
+                                    }
+                                    onWidthChanged: if (item) item.width = width
+                                    Connections {
+                                        target: homeRoot
+                                        function onNodeStateChanged() {
+                                            if (!startRustBtn.item) return
+                                            startRustBtn.item.text = (homeRoot.nodeState === "rustStarting")
+                                                    ? "Starting Rust Node..."
+                                                    : "Start Rust Node"
+                                            startRustBtn.item.enabled = (homeRoot.nodeState === "none")
+                                        }
+                                    }
+                                }
+
+                                Loader {
+                                    id: restartRustBtn
+                                    Layout.fillWidth: true
+                                    Layout.preferredWidth: 200
+                                    Layout.preferredHeight: 52
+                                    sourceComponent: darkButtonComponent
+                                    onLoaded: {
+                                        if (!restartRustBtn.item) return
+                                        restartRustBtn.item.text = "Restart Rust Node"
+                                        restartRustBtn.item.enabled = (homeRoot.nodeState === "rust")
+                                        restartRustBtn.item.clicked.connect(function () { mgr.restartRust([]) })
+                                        restartRustBtn.item.width = restartRustBtn.width
+                                    }
+                                    onWidthChanged: if (item) item.width = width
+                                    Connections {
+                                        target: homeRoot
+                                        function onNodeStateChanged() {
+                                            if (!restartRustBtn.item) return
+                                            restartRustBtn.item.enabled = (homeRoot.nodeState === "rust")
+                                        }
+                                    }
+                                }
+
+                                Loader {
+                                    id: stopRustBtn
+                                    Layout.fillWidth: true
+                                    Layout.preferredWidth: 200
+                                    Layout.preferredHeight: 52
+                                    sourceComponent: darkButtonComponent
+                                    onLoaded: {
+                                        if (!stopRustBtn.item) return
+                                        stopRustBtn.item.text = "Stop Rust Node"
+                                        stopRustBtn.item.enabled = (homeRoot.nodeState === "rust")
+                                        stopRustBtn.item.clicked.connect(function () { mgr.stopRust() })
+                                        stopRustBtn.item.width = stopRustBtn.width
+                                    }
+                                    onWidthChanged: if (item) item.width = width
+                                    Connections {
+                                        target: homeRoot
+                                        function onNodeStateChanged() {
+                                            if (!stopRustBtn.item) return
+                                            stopRustBtn.item.enabled = (homeRoot.nodeState === "rust")
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 8
+
+                            Text {
+                                text: "Grin++ Node"
+                                color: "#f0f0f0"
+                                font.pixelSize: 16
+                                font.bold: true
+                            }
+
+                            GridLayout {
+                                Layout.fillWidth: true
+                                columns: homeRoot.compactLayout ? 1 : 3
+                                columnSpacing: 8
+                                rowSpacing: 8
+
+                                Loader {
+                                    id: startGrinppBtn
+                                    Layout.fillWidth: true
+                                    Layout.preferredWidth: 200
+                                    Layout.preferredHeight: 52
+                                    sourceComponent: darkButtonComponent
+                                    onLoaded: {
+                                        if (!startGrinppBtn.item) return
+                                        startGrinppBtn.item.text = (homeRoot.nodeState === "grinppStarting")
+                                                ? "Starting Grin++ Node..."
+                                                : "Start Grin++ Node"
+                                        startGrinppBtn.item.enabled = (homeRoot.nodeState === "none")
+                                        startGrinppBtn.item.clicked.connect(function () {
+                                            if (homeRoot.nodeState !== "none") return
+                                            homeRoot.nodeState = "grinppStarting"
+                                            mgr.startGrinPP([])
+                                        })
+                                        startGrinppBtn.item.width = startGrinppBtn.width
+                                    }
+                                    onWidthChanged: if (item) item.width = width
+                                    Connections {
+                                        target: homeRoot
+                                        function onNodeStateChanged() {
+                                            if (!startGrinppBtn.item) return
+                                            startGrinppBtn.item.text = (homeRoot.nodeState === "grinppStarting")
+                                                    ? "Starting Grin++ Node..."
+                                                    : "Start Grin++ Node"
+                                            startGrinppBtn.item.enabled = (homeRoot.nodeState === "none")
+                                        }
+                                    }
+                                }
+
+                                Loader {
+                                    id: restartGrinppBtn
+                                    Layout.fillWidth: true
+                                    Layout.preferredWidth: 200
+                                    Layout.preferredHeight: 52
+                                    sourceComponent: darkButtonComponent
+                                    onLoaded: {
+                                        if (!restartGrinppBtn.item) return
+                                        restartGrinppBtn.item.text = "Restart Grin++ Node"
+                                        restartGrinppBtn.item.enabled = (homeRoot.nodeState === "grinpp")
+                                        restartGrinppBtn.item.clicked.connect(function () { mgr.restartGrinPP([]) })
+                                        restartGrinppBtn.item.width = restartGrinppBtn.width
+                                    }
+                                    onWidthChanged: if (item) item.width = width
+                                    Connections {
+                                        target: homeRoot
+                                        function onNodeStateChanged() {
+                                            if (!restartGrinppBtn.item) return
+                                            restartGrinppBtn.item.enabled = (homeRoot.nodeState === "grinpp")
+                                        }
+                                    }
+                                }
+
+                                Loader {
+                                    id: stopGrinppBtn
+                                    Layout.fillWidth: true
+                                    Layout.preferredWidth: 200
+                                    Layout.preferredHeight: 52
+                                    sourceComponent: darkButtonComponent
+                                    onLoaded: {
+                                        if (!stopGrinppBtn.item) return
+                                        stopGrinppBtn.item.text = "Stop Grin++ Node"
+                                        stopGrinppBtn.item.enabled = (homeRoot.nodeState === "grinpp")
+                                        stopGrinppBtn.item.clicked.connect(function () { mgr.stopGrinPP() })
+                                        stopGrinppBtn.item.width = stopGrinppBtn.width
+                                    }
+                                    onWidthChanged: if (item) item.width = width
+                                    Connections {
+                                        target: homeRoot
+                                        function onNodeStateChanged() {
+                                            if (!stopGrinppBtn.item) return
+                                            stopGrinppBtn.item.enabled = (homeRoot.nodeState === "grinpp")
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Response-Log
+                    ScrollView {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 160
+                        clip: true
+
+                        background: Rectangle {
+                            color: "#2b2b2b"
+                            radius: 6
+                            border.color: "#555"
+                            border.width: 1
+                        }
+
+                        ScrollBar.vertical: ScrollBar {
+                            id: vbar
+                            policy: ScrollBar.AsNeeded
+                            contentItem: Rectangle {
+                                implicitWidth: 6
+                                radius: 3
+                                color: vbar.pressed ? "#777" : (vbar.hovered ? "#666" : "#444")
+                            }
+                            background: Rectangle { color: "transparent" }
+                        }
+                        ScrollBar.horizontal: ScrollBar {
+                            id: hbar
+                            policy: ScrollBar.AsNeeded
+                            contentItem: Rectangle {
+                                implicitHeight: 6
+                                radius: 3
+                                color: hbar.pressed ? "#777" : (hbar.hovered ? "#666" : "#444")
+                            }
+                            background: Rectangle { color: "transparent" }
+                        }
+
+                        TextArea {
+                            id: responseField
+                            readOnly: true
+                            wrapMode: TextEdit.NoWrap
+                            textFormat: TextEdit.PlainText
+                            color: "white"
+                            selectionColor: "#295d9b"
+                            selectedTextColor: "white"
+                            font.family: "Consolas"
+                            font.pixelSize: 12
+                            background: null
+                        }
+                    }
+                }
+
+                // STATUS + PEERS
+                StatusView {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 200
+                }
+
+                PeerListView {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                }
             }
-            Item { Layout.fillWidth: true }
-        }
-
-        // BUTTONS + RESPONSE
-        ColumnLayout {
-            Layout.fillWidth: true
-            spacing: 10
-
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 8
-
-                // --- Rust: Start ---
-                Loader {
-                    id: startRustBtn
-                    sourceComponent: darkButtonComponent
-                    onLoaded: {
-                        if (!startRustBtn.item) return
-                        startRustBtn.item.text = (homeRoot.nodeState === "rustStarting")
-                                ? "Starting Rust Node…"
-                                : "Start Rust Node"
-                        startRustBtn.item.enabled = (homeRoot.nodeState === "none")
-                        startRustBtn.item.clicked.connect(function () {
-                            if (homeRoot.nodeState !== "none") return
-                            homeRoot.nodeState = "rustStarting"
-                            mgr.startRust([])
-                        })
-                    }
-                    Connections {
-                        target: homeRoot
-                        function onNodeStateChanged() {
-                            if (!startRustBtn.item) return
-                            startRustBtn.item.text = (homeRoot.nodeState === "rustStarting")
-                                    ? "Starting Rust Node…"
-                                    : "Start Rust Node"
-                            startRustBtn.item.enabled = (homeRoot.nodeState === "none")
-                        }
-                    }
-                }
-
-                // --- Rust: Restart ---
-                Loader {
-                    id: restartRustBtn
-                    sourceComponent: darkButtonComponent
-                    onLoaded: {
-                        if (!restartRustBtn.item) return
-                        restartRustBtn.item.text = "Restart Rust Node"
-                        restartRustBtn.item.enabled = (homeRoot.nodeState === "rust")
-                        restartRustBtn.item.clicked.connect(function () { mgr.restartRust([]) })
-                    }
-                    Connections {
-                        target: homeRoot
-                        function onNodeStateChanged() {
-                            if (!restartRustBtn.item) return
-                            restartRustBtn.item.enabled = (homeRoot.nodeState === "rust")
-                        }
-                    }
-                }
-
-                // --- Rust: Stop ---
-                Loader {
-                    id: stopRustBtn
-                    sourceComponent: darkButtonComponent
-                    onLoaded: {
-                        if (!stopRustBtn.item) return
-                        stopRustBtn.item.text = "Stop Rust Node"
-                        stopRustBtn.item.enabled = (homeRoot.nodeState === "rust")
-                        stopRustBtn.item.clicked.connect(function () { mgr.stopRust() })
-                    }
-                    Connections {
-                        target: homeRoot
-                        function onNodeStateChanged() {
-                            if (!stopRustBtn.item) return
-                            stopRustBtn.item.enabled = (homeRoot.nodeState === "rust")
-                        }
-                    }
-                }
-
-                // --- Grin++: Start ---
-                Loader {
-                    id: startGrinppBtn
-                    sourceComponent: darkButtonComponent
-                    onLoaded: {
-                        if (!startGrinppBtn.item) return
-                        startGrinppBtn.item.text = (homeRoot.nodeState === "grinppStarting")
-                                ? "Starting Grin++ Node…"
-                                : "Start Grin++ Node"
-                        startGrinppBtn.item.enabled = (homeRoot.nodeState === "none")
-                        startGrinppBtn.item.clicked.connect(function () {
-                            if (homeRoot.nodeState !== "none") return
-                            homeRoot.nodeState = "grinppStarting"
-                            mgr.startGrinPP([])
-                        })
-                    }
-                    Connections {
-                        target: homeRoot
-                        function onNodeStateChanged() {
-                            if (!startGrinppBtn.item) return
-                            startGrinppBtn.item.text = (homeRoot.nodeState === "grinppStarting")
-                                    ? "Starting Grin++ Node…"
-                                    : "Start Grin++ Node"
-                            startGrinppBtn.item.enabled = (homeRoot.nodeState === "none")
-                        }
-                    }
-                }
-
-                // --- Grin++: Restart ---
-                Loader {
-                    id: restartGrinppBtn
-                    sourceComponent: darkButtonComponent
-                    onLoaded: {
-                        if (!restartGrinppBtn.item) return
-                        restartGrinppBtn.item.text = "Restart Grin++ Node"
-                        restartGrinppBtn.item.enabled = (homeRoot.nodeState === "grinpp")
-                        restartGrinppBtn.item.clicked.connect(function () { mgr.restartGrinPP([]) })
-                    }
-                    Connections {
-                        target: homeRoot
-                        function onNodeStateChanged() {
-                            if (!restartGrinppBtn.item) return
-                            restartGrinppBtn.item.enabled = (homeRoot.nodeState === "grinpp")
-                        }
-                    }
-                }
-
-                // --- Grin++: Stop ---
-                Loader {
-                    id: stopGrinppBtn
-                    sourceComponent: darkButtonComponent
-                    onLoaded: {
-                        if (!stopGrinppBtn.item) return
-                        stopGrinppBtn.item.text = "Stop Grin++ Node"
-                        stopGrinppBtn.item.enabled = (homeRoot.nodeState === "grinpp")
-                        stopGrinppBtn.item.clicked.connect(function () { mgr.stopGrinPP() })
-                    }
-                    Connections {
-                        target: homeRoot
-                        function onNodeStateChanged() {
-                            if (!stopGrinppBtn.item) return
-                            stopGrinppBtn.item.enabled = (homeRoot.nodeState === "grinpp")
-                        }
-                    }
-                }
-
-                Item { Layout.fillWidth: true }
-            }
-
-            // Response-Log
-            ScrollView {
-                Layout.fillWidth: true
-                Layout.preferredHeight: 160
-                clip: true
-
-                background: Rectangle {
-                    color: "#2b2b2b"
-                    radius: 6
-                    border.color: "#555"
-                    border.width: 1
-                }
-
-                ScrollBar.vertical: ScrollBar {
-                    id: vbar
-                    policy: ScrollBar.AsNeeded
-                    contentItem: Rectangle {
-                        implicitWidth: 6
-                        radius: 3
-                        color: vbar.pressed ? "#777" : (vbar.hovered ? "#666" : "#444")
-                    }
-                    background: Rectangle { color: "transparent" }
-                }
-                ScrollBar.horizontal: ScrollBar {
-                    id: hbar
-                    policy: ScrollBar.AsNeeded
-                    contentItem: Rectangle {
-                        implicitHeight: 6
-                        radius: 3
-                        color: hbar.pressed ? "#777" : (hbar.hovered ? "#666" : "#444")
-                    }
-                    background: Rectangle { color: "transparent" }
-                }
-
-                TextArea {
-                    id: responseField
-                    readOnly: true
-                    wrapMode: TextEdit.NoWrap
-                    textFormat: TextEdit.PlainText
-                    color: "white"
-                    selectionColor: "#295d9b"
-                    selectedTextColor: "white"
-                    font.family: "Consolas"
-                    font.pixelSize: 12
-                    background: null
-                }
-            }
-        }
-
-        // STATUS + PEERS
-        StatusView {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 200
-        }
-
-        PeerListView {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
         }
     }
 
@@ -456,3 +544,6 @@ Item {
         }
     }
 }
+
+
+

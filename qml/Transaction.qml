@@ -1,4 +1,4 @@
-import QtQuick 2.15
+﻿import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 
@@ -7,6 +7,7 @@ Item {
     Layout.fillWidth: true
     Layout.fillHeight: true
     property bool nodeRunning: false
+    property bool compactLayout: false
 
     // In main.cpp gesetzt: engine.rootContext()->setContextProperty("nodeForeignApi", api);
     readonly property var foreignApi: nodeForeignApi
@@ -29,9 +30,9 @@ Item {
         var pv = obj.prevBlockToLast || obj.prev_block_to_last || obj.prev_block_h
         var td = obj.totalDifficulty || obj.total_difficulty
 
-        // Falls Q_GADGET-Felder nicht als Properties sichtbar wären, versuche stringifier
+        // Falls Q_GADGET-Felder nicht als Properties sichtbar wÃ¤ren, versuche stringifier
         // (u. U. liefert dein C++-Side schon ein QJsonObject -> dann oben ok)
-        // Noch defensiver: Keys-case-insensitive prüfen
+        // Noch defensiver: Keys-case-insensitive prÃ¼fen
         function pick(o, keys) {
             for (var i=0;i<keys.length;i++) {
                 var k = keys[i]
@@ -120,8 +121,8 @@ Item {
 
         // Robust: egal ob Tip als Gadget/Map kommt
         function onTipUpdated(payload) {
-            // Debug-Ausgabe einmal aktiv lassen – hilft sofort beim Verifizieren
-            // (kannst du später entfernen)
+            // Debug-Ausgabe einmal aktiv lassen â€“ hilft sofort beim Verifizieren
+            // (kannst du spÃ¤ter entfernen)
             // console.debug("[Transaction.qml] tipUpdated payload =", payload)
             tip = toTip(payload)
         }
@@ -165,30 +166,35 @@ Item {
     ColumnLayout {
         anchors.fill: parent
         property bool nodeRunning: false
-        anchors.margins: 20
+        anchors.margins: compactLayout ? 12 : 20
         spacing: 16
 
-        RowLayout {
+        GridLayout {
             Layout.fillWidth: true
-            spacing: 12
+            columns: compactLayout ? 1 : 3
+            columnSpacing: 12
+            rowSpacing: 6
 
             Label {
                 text: "Transaction"
                 color: "white"
                 font.pixelSize: 28
                 font.bold: true
+                Layout.fillWidth: true
             }
 
             Item { Layout.fillWidth: true }
 
             Loader {
                 id: refreshBtn
+                Layout.alignment: compactLayout ? (Qt.AlignLeft | Qt.AlignVCenter) : (Qt.AlignRight | Qt.AlignVCenter)
+                Layout.fillWidth: compactLayout
                 sourceComponent: darkButtonComponent
                 onLoaded: {
                     if (!refreshBtn.item) return
                     refreshBtn.item.text = "Refresh"
                     refreshBtn.item.clicked.connect(function() {
-                        status.show("Aktualisiere …")
+                        status.show("Aktualisiere ...")
                         refreshAll()
                     })
                 }
@@ -202,36 +208,32 @@ Item {
             lastBlockPushed: tip.lastBlockPushed
             prevBlockToLast: tip.prevBlockToLast
             totalDifficulty: tip.totalDifficulty
+            compactLayout: root.compactLayout
         }
 
         // Infochips Pool/Stempool
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 10
+        Flow {
+            width: parent.width
+            spacing: compactLayout ? 8 : 12
             InfoChip { label: "Pool"; value: poolSize }
             InfoChip { label: "Stempool"; value: stempoolSize }
-            Item { Layout.fillWidth: true }
         }
-
         // Hinweis
         Label {
             Layout.fillWidth: true
-            text: "Hinweis: Stempool-Transaktionen werden aus Privacy-Gründen nicht gelistet; unten siehst du nur den (geflufften) Pool."
+            text: "Hinweis: Stempool-Transaktionen werden aus Privacy-GrÃ¼nden nicht gelistet; unten siehst du nur den (geflufften) Pool."
             color: "#888"
             font.pixelSize: 12
         }
 
         // Legende
-        Row {
-            Layout.fillWidth: true
-            spacing: 10
-            height: 32
+        Flow {
+            width: parent.width
+            spacing: compactLayout ? 6 : 10
             LegendChip { label: "Fee hoch" }
             LegendChip { label: "Fee niedrig"; invert: true }
             LegendChip { label: "Pool"; colorMode: "src-pool" }
-            Item { Layout.fillWidth: true }
         }
-
         // Inhalt (Pool-Transaktionen)
         Frame {
             Layout.fillWidth: true
@@ -285,31 +287,39 @@ Item {
         property string lastBlockPushed: ""
         property string prevBlockToLast: ""
         property var totalDifficulty: 0
+        property bool compactLayout: false
 
         radius: 12
         color: "#141414"
         border.color: "#2a2a2a"
         border.width: 1
-        height: 96
+        height: compactLayout ? 140 : 96
 
-        RowLayout {
+        Flow {
+            id: tipFlow
             anchors.fill: parent
             anchors.margins: 14
-            spacing: 18
+            spacing: compactLayout ? 12 : 18
 
-            ColumnLayout {
+            Column {
+                width: compactLayout ? tipFlow.width : 140
                 spacing: 2
                 Label { text: "Tip Height"; color: "#bbbbbb"; font.pixelSize: 12 }
                 Label {
-                    text: tipCard.tipHeight > 0 ? tipCard.tipHeight.toLocaleString(Qt.locale(), 'f', 0) : "—"
+                    text: tipCard.tipHeight > 0 ? tipCard.tipHeight.toLocaleString(Qt.locale(), 'f', 0) : "-"
                     color: "white"; font.pixelSize: 28; font.bold: true
                 }
             }
 
-            Rectangle { width: 1; height: parent.height * 0.7; color: "#2d2d2d"; Layout.alignment: Qt.AlignVCenter }
+            Rectangle {
+                width: compactLayout ? 0 : 1
+                height: parent.height * 0.7
+                visible: !compactLayout
+                color: "#2d2d2d"
+            }
 
-            ColumnLayout {
-                Layout.fillWidth: true
+            Column {
+                width: compactLayout ? tipFlow.width : 260
                 spacing: 6
 
                 RowLayout {
@@ -317,8 +327,8 @@ Item {
                     Label { text: "Last:"; color: "#bbbbbb"; font.pixelSize: 12 }
                     Label {
                         text: tipCard.lastBlockPushed && tipCard.lastBlockPushed.length >= 8
-                              ? tipCard.lastBlockPushed.substr(0, 8) + "…" + tipCard.lastBlockPushed.substr(-8)
-                              : (tipCard.lastBlockPushed || "—")
+                              ? tipCard.lastBlockPushed.substr(0, 8) + "..." + tipCard.lastBlockPushed.substr(-8)
+                              : (tipCard.lastBlockPushed || "-")
                         color: "#eaeaea"; font.family: "Consolas"; font.pixelSize: 14
                         elide: Text.ElideRight; Layout.fillWidth: true
                     }
@@ -329,17 +339,23 @@ Item {
                     Label { text: "Prev:"; color: "#bbbbbb"; font.pixelSize: 12 }
                     Label {
                         text: tipCard.prevBlockToLast && tipCard.prevBlockToLast.length >= 8
-                              ? tipCard.prevBlockToLast.substr(0, 8) + "…" + tipCard.prevBlockToLast.substr(-8)
-                              : (tipCard.prevBlockToLast || "—")
+                              ? tipCard.prevBlockToLast.substr(0, 8) + "..." + tipCard.prevBlockToLast.substr(-8)
+                              : (tipCard.prevBlockToLast || "-")
                         color: "#cfcfcf"; font.family: "Consolas"; font.pixelSize: 14
                         elide: Text.ElideRight; Layout.fillWidth: true
                     }
                 }
             }
 
-            Rectangle { width: 1; height: parent.height * 0.7; color: "#2d2d2d"; Layout.alignment: Qt.AlignVCenter }
+            Rectangle {
+                width: compactLayout ? 0 : 1
+                height: parent.height * 0.7
+                visible: !compactLayout
+                color: "#2d2d2d"
+            }
 
-            ColumnLayout {
+            Column {
+                width: compactLayout ? tipFlow.width : 150
                 spacing: 2
                 Label { text: "Total Difficulty"; color: "#bbbbbb"; font.pixelSize: 12 }
                 Label {
@@ -424,7 +440,7 @@ Item {
 
             Row { spacing: 6
                 Label {
-                    text: txId && txId.length ? txId.substr(0,10) + "…" : "Tx"
+                    text: txId && txId.length ? txId.substr(0,10) + "â€¦" : "Tx"
                     font.bold: true
                     color: "#eee"
                     elide: Text.ElideRight
@@ -449,7 +465,7 @@ Item {
 
         ToolTip.visible: hover.containsMouse
         ToolTip.delay: 180
-        ToolTip.text: "Tx: " + (txId || "–")
+        ToolTip.text: "Tx: " + (txId || "â€“")
                       + "\nFee: " + fee
                       + "\nWeight: " + weight
                       + "\nI/O/K: " + inputs + "/" + outputs + "/" + kernels
@@ -482,8 +498,14 @@ Item {
             anchors.margins: 10
             spacing: 8
             Label { id: label; text: sb.message; color: sb.fgOk; elide: Text.ElideRight; Layout.fillWidth: true }
-            Button { text: "×"; onClicked: sb.message = "" }
+            Button { text: "Ã—"; onClicked: sb.message = "" }
         }
         Timer { id: hideTimer; interval: 4000; running: false; onTriggered: sb.message = "" }
     }
 }
+
+
+
+
+
+

@@ -1,13 +1,14 @@
-import QtQuick 2.15
+﻿import QtQuick 2.15
 import QtQuick.Controls 2.15
 import Geo 1.0   // unser C++-Typ GeoLookup
 
 Item {
     id: peersRoot
-    z: 1000   // liegt über dem Hintergrund
+    property bool compactLayout: false
+    z: 1000   // liegt Ã¼ber dem Hintergrund
 
-    // Zoomstufe für Europa
-    property int zoomLevel: 3
+    // Zoomstufe fÃ¼r Europa
+    property int zoomLevel: compactLayout ? 2 : 3
     property int tileSize: 256
     property int tilesPerRow: Math.pow(2, zoomLevel)
 
@@ -112,4 +113,7 @@ Item {
         }
     }
 }
+
+
+
 
