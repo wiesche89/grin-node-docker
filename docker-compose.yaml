@@ -6,12 +6,9 @@ services:
     image: grin-node-docker:latest
     container_name: grin-node-docker
     restart: unless-stopped
-
     ports:
       - "8083:80"
-      
     environment:
       TZ: "Europe/Berlin"
-
     volumes:
       - ./nginx-logs:/var/log/nginx
