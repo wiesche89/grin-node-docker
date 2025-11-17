@@ -16,7 +16,7 @@ ARG BUILD_CONFIG=Release
 
 RUN mkdir -p build \
  && cd build \
- && /opt/Qt/bin/qt-cmake -G Ninja -DCMAKE_BUILD_TYPE=${BUILD_CONFIG} /src \
+ && QT_WASM_PTHREADS=OFF EMCC_CFLAGS="-s USE_PTHREADS=0" EMCC_CXXFLAGS="-s USE_PTHREADS=0" /opt/Qt/bin/qt-cmake -G Ninja -DCMAKE_BUILD_TYPE=${BUILD_CONFIG} /src \
  && ninja \
  && mkdir -p /src/dist \
  && cp /src/build/grin-node-docker.html /src/dist/ \
