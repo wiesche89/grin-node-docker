@@ -25,6 +25,7 @@ Rectangle {
     // komplette Datenstruktur aus C++
     property var currentStatus: null
     property string lastUpdated: ""
+    property bool compactLayout: root.width < 640
 
     // ---------- Helper ----------
     function readInfo(key) {
@@ -267,12 +268,15 @@ Rectangle {
         Rectangle { height: 1; color: "#555"; Layout.fillWidth: true }
 
         // Zwei Spalten
-        RowLayout {
+        GridLayout {
             Layout.fillWidth: true
-            spacing: 40
+            columns: compactLayout ? 1 : 2
+            columnSpacing: compactLayout ? 0 : 40
+            rowSpacing: 12
 
             // Linke Spalte
             ColumnLayout {
+                Layout.fillWidth: true
                 spacing: 6
 
                 RowLayout {
@@ -443,6 +447,7 @@ Rectangle {
 
             // Rechte Spalte
             ColumnLayout {
+                Layout.fillWidth: true
                 spacing: 6
 
                 RowLayout {

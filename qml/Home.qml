@@ -239,7 +239,7 @@ Item {
 
                             GridLayout {
                                 Layout.fillWidth: true
-                                columns: homeRoot.compactLayout ? 1 : 3
+                                columns: 3
                                 columnSpacing: 8
                                 rowSpacing: 8
 
@@ -252,8 +252,8 @@ Item {
                                     onLoaded: {
                                         if (!startRustBtn.item) return
                                         startRustBtn.item.text = (homeRoot.nodeState === "rustStarting")
-                                                ? "Starting Rust Node..."
-                                                : "Start Rust Node"
+                                                ? "Starting..."
+                                                : "Start"
                                         startRustBtn.item.enabled = (homeRoot.nodeState === "none")
                                         startRustBtn.item.clicked.connect(function () {
                                             if (homeRoot.nodeState !== "none") return
@@ -268,8 +268,8 @@ Item {
                                         function onNodeStateChanged() {
                                             if (!startRustBtn.item) return
                                             startRustBtn.item.text = (homeRoot.nodeState === "rustStarting")
-                                                    ? "Starting Rust Node..."
-                                                    : "Start Rust Node"
+                                                    ? "Starting..."
+                                                    : "Start"
                                             startRustBtn.item.enabled = (homeRoot.nodeState === "none")
                                         }
                                     }
@@ -283,7 +283,7 @@ Item {
                                     sourceComponent: darkButtonComponent
                                     onLoaded: {
                                         if (!restartRustBtn.item) return
-                                        restartRustBtn.item.text = "Restart Rust Node"
+                                        restartRustBtn.item.text = "Restart"
                                         restartRustBtn.item.enabled = (homeRoot.nodeState === "rust")
                                         restartRustBtn.item.clicked.connect(function () { mgr.restartRust([]) })
                                         restartRustBtn.item.width = restartRustBtn.width
@@ -306,7 +306,7 @@ Item {
                                     sourceComponent: darkButtonComponent
                                     onLoaded: {
                                         if (!stopRustBtn.item) return
-                                        stopRustBtn.item.text = "Stop Rust Node"
+                                        stopRustBtn.item.text = "Stop"
                                         stopRustBtn.item.enabled = (homeRoot.nodeState === "rust")
                                         stopRustBtn.item.clicked.connect(function () { mgr.stopRust() })
                                         stopRustBtn.item.width = stopRustBtn.width
@@ -336,7 +336,7 @@ Item {
 
                             GridLayout {
                                 Layout.fillWidth: true
-                                columns: homeRoot.compactLayout ? 1 : 3
+                                columns: 3
                                 columnSpacing: 8
                                 rowSpacing: 8
 
@@ -349,8 +349,8 @@ Item {
                                     onLoaded: {
                                         if (!startGrinppBtn.item) return
                                         startGrinppBtn.item.text = (homeRoot.nodeState === "grinppStarting")
-                                                ? "Starting Grin++ Node..."
-                                                : "Start Grin++ Node"
+                                                ? "Starting..."
+                                                : "Start"
                                         startGrinppBtn.item.enabled = (homeRoot.nodeState === "none")
                                         startGrinppBtn.item.clicked.connect(function () {
                                             if (homeRoot.nodeState !== "none") return
@@ -365,8 +365,8 @@ Item {
                                         function onNodeStateChanged() {
                                             if (!startGrinppBtn.item) return
                                             startGrinppBtn.item.text = (homeRoot.nodeState === "grinppStarting")
-                                                    ? "Starting Grin++ Node..."
-                                                    : "Start Grin++ Node"
+                                                    ? "Starting..."
+                                                    : "Start"
                                             startGrinppBtn.item.enabled = (homeRoot.nodeState === "none")
                                         }
                                     }
@@ -380,7 +380,7 @@ Item {
                                     sourceComponent: darkButtonComponent
                                     onLoaded: {
                                         if (!restartGrinppBtn.item) return
-                                        restartGrinppBtn.item.text = "Restart Grin++ Node"
+                                        restartGrinppBtn.item.text = "Restart"
                                         restartGrinppBtn.item.enabled = (homeRoot.nodeState === "grinpp")
                                         restartGrinppBtn.item.clicked.connect(function () { mgr.restartGrinPP([]) })
                                         restartGrinppBtn.item.width = restartGrinppBtn.width
@@ -403,7 +403,7 @@ Item {
                                     sourceComponent: darkButtonComponent
                                     onLoaded: {
                                         if (!stopGrinppBtn.item) return
-                                        stopGrinppBtn.item.text = "Stop Grin++ Node"
+                                        stopGrinppBtn.item.text = "Stop"
                                         stopGrinppBtn.item.enabled = (homeRoot.nodeState === "grinpp")
                                         stopGrinppBtn.item.clicked.connect(function () { mgr.stopGrinPP() })
                                         stopGrinppBtn.item.width = stopGrinppBtn.width
@@ -478,7 +478,8 @@ Item {
 
                 PeerListView {
                     Layout.fillWidth: true
-                    Layout.fillHeight: true
+                    Layout.preferredHeight: 320
+                    Layout.minimumHeight: 240
                 }
             }
         }

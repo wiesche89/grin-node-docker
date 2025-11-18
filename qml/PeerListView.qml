@@ -14,14 +14,15 @@ Rectangle {
     property var peersModel: []
     property string lastUpdated: ""
 
-    Column {
+    ColumnLayout {
+        id: contentLayout
         anchors.fill: parent
         anchors.margins: 12
         spacing: 8
 
         // Header mit Titel und Uhrzeit nebeneinander
         RowLayout {
-            width: parent.width
+            Layout.fillWidth: true
             spacing: 8
 
             Label {
@@ -43,7 +44,7 @@ Rectangle {
         }
         // Header row
         Rectangle {
-            width: parent.width
+            Layout.fillWidth: true
             height: 30
             color: "#444"
             radius: 4
@@ -64,8 +65,11 @@ Rectangle {
 
         ListView {
             id: peerList
-            width: parent.width
-            height: 400
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            Layout.minimumHeight: 180
+            Layout.preferredHeight: Math.max(220, Math.min(460, contentHeight + 40))
+            Layout.maximumHeight: 520
             clip: true
             spacing: 2
             model: root.peersModel

@@ -234,6 +234,9 @@ void GrinNodeManager::onReplyFinished(QNetworkReply *reply)
     };
 
     if (reply->error() != QNetworkReply::NoError) {
+        qDebug() << "[GrinNodeManager] Network error for"
+                 << url.toString() << ":"
+                 << reply->errorString();
         emit errorOccurred(QString("[%1] %2").arg(url.toString(), reply->errorString()));
         finish();
         reply->deleteLater();
