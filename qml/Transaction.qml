@@ -411,7 +411,7 @@ Item {
 
             Row { spacing: 6
                 Label {
-                    text: txId && txId.length ? txId.substr(0,10) + "â€¦" : "Tx"
+                    text: txId && txId.length ? txId.substr(0,10) + "" : "Tx"
                     font.bold: true
                     color: "#eee"
                     elide: Text.ElideRight
@@ -436,7 +436,7 @@ Item {
 
         ToolTip.visible: hover.containsMouse
         ToolTip.delay: 180
-        ToolTip.text: "Tx: " + (txId || "â€“")
+        ToolTip.text: "Tx: " + (txId || "")
                       + "\nFee: " + fee
                       + "\nWeight: " + weight
                       + "\nI/O/K: " + inputs + "/" + outputs + "/" + kernels

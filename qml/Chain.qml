@@ -19,7 +19,7 @@ Item {
     // ---------- Chain state ----------
     property var tip: ({ height: 0, lastBlockPushed: "", prevBlockToLast: "", totalDifficulty: 0 })
     property var blocksRaw: []        // volle Objekte inkl. inputs/outputs/kernels
-    property var blocks: []           // vereinfachte Kacheldaten (height/hash/â€¦)
+    property var blocks: []           // vereinfachte Kacheldaten (height/hash)
 
     // ---------- Selection / Details (binding-based) ----------
     property int selectedIndex: -1
@@ -280,7 +280,7 @@ Item {
                     Layout.fillWidth: true
                     spacing: 8
                     Label { text: "Block details"; color: "#bbb" }
-                    Label { text: detailsHeight >= 0 ? ("#" + detailsHeight) : "â€”"; color: "white"; font.bold: true }
+                    Label { text: detailsHeight >= 0 ? ("#" + detailsHeight) : ""; color: "white"; font.bold: true }
                     Item { Layout.fillWidth: true }
                 }
 
@@ -308,8 +308,8 @@ Item {
                             anchors.fill: parent
                             Column {
                                 anchors.fill: parent; anchors.margins: 10; spacing: 6
-                                Label { text: hdrData ? "Hash: " + (hdrData.hash || "â€”") : "â€”"; color: "#ddd" }
-                                Label { text: hdrData ? "Previous: " + (hdrData.previous || "â€”") : ""; color: "#bbb" }
+                                Label { text: hdrData ? "Hash: " + (hdrData.hash || "") : ""; color: "#ddd" }
+                                Label { text: hdrData ? "Previous: " + (hdrData.previous || "") : ""; color: "#bbb" }
                                 Label { text: hdrData ? "Total difficulty: " + hdrData.total_difficulty : ""; color: "#bbb" }
                                 Label { text: hdrData && hdrData.timestamp ? "Time: " + new Date(hdrData.timestamp*1000).toLocaleString() : ""; color: "#bbb" }
                                 Label { text: hdrData && hdrData.kernel_root ? "Kernel root: " + hdrData.kernel_root : ""; color: "#bbb" }
@@ -353,7 +353,7 @@ Item {
                                                 anchors.fill: parent
                                                 anchors.margins: 8
                                                 spacing: 4
-                                                Label { text: "Commit: " + (modelData.commit || "â€”"); color: "#ddd" }
+                                                Label { text: "Commit: " + (modelData.commit || ""); color: "#ddd" }
                                                 Label { visible: (modelData.height || 0) > 0; text: "Height: " + modelData.height; color: "#bbb" }
                                                 Label { visible: modelData.spent !== undefined; text: "Spent: " + (modelData.spent ? "yes" : "no"); color: "#bbb" }
                                             }
@@ -399,10 +399,10 @@ Item {
                                                 anchors.fill: parent
                                                 anchors.margins: 8
                                                 spacing: 4
-                                                Label { text: "Commitment: " + (modelData.commitment || "â€”"); color: "#ddd" }
-                                                Label { text: "Type: " + (modelData.output_type || "â€”"); color: "#bbb" }
-                                                Label { text: "Height: " + (modelData.height || "â€”"); color: "#bbb" }
-                                                Label { text: "MMR index: " + (modelData.mmr_index || "â€”"); color: "#bbb" }
+                                                Label { text: "Commitment: " + (modelData.commitment || ""); color: "#ddd" }
+                                                Label { text: "Type: " + (modelData.output_type || ""); color: "#bbb" }
+                                                Label { text: "Height: " + (modelData.height || ""); color: "#bbb" }
+                                                Label { text: "MMR index: " + (modelData.mmr_index || ""); color: "#bbb" }
                                                 Label { text: "Spent: " + (modelData.spent ? "yes" : "no"); color: "#bbb" }
                                                 Label { visible: !!modelData.proof_hash; text: "Proof hash: " + modelData.proof_hash; color: "#777" }
                                             }
@@ -448,11 +448,11 @@ Item {
                                                 anchors.fill: parent
                                                 anchors.margins: 8
                                                 spacing: 4
-                                                Label { text: "Features: " + (modelData.features || "â€”"); color: "#ddd" }
+                                                Label { text: "Features: " + (modelData.features || ""); color: "#ddd" }
                                                 Label { text: "Fee: " + modelData.fee; color: "#bbb" }
                                                 Label { text: "Lock height: " + modelData.lock_height; color: "#bbb" }
-                                                Label { text: "Excess: " + (modelData.excess || "â€”"); color: "#bbb"; wrapMode: Text.WrapAnywhere }
-                                                Label { text: "Excess sig: " + (modelData.excess_sig || "â€”"); color: "#777"; wrapMode: Text.WrapAnywhere }
+                                                Label { text: "Excess: " + (modelData.excess || ""); color: "#bbb"; wrapMode: Text.WrapAnywhere }
+                                                Label { text: "Excess sig: " + (modelData.excess_sig || ""); color: "#777"; wrapMode: Text.WrapAnywhere }
                                             }
                                         }
                                     }
@@ -527,12 +527,12 @@ Item {
         Column {
             anchors.fill: parent; anchors.margins: 10; spacing: 4
             Row { spacing: 8
-                Label { text: "#" + (blk ? blk.height : "â€”"); color: "white"; font.bold: true }
+                Label { text: "#" + (blk ? blk.height : ""); color: "white"; font.bold: true }
                 Rectangle { width: 6; height: 6; radius: 3; color: "#7aa2ff" }
-                Label { text: (blk && blk.hash) ? blk.hash.substr(0,10) + "â€¦" : "â€”"; color: "#cfcfcf"; font.pixelSize: 12; elide: Text.ElideRight }
+                Label { text: (blk && blk.hash) ? blk.hash.substr(0,10) + "" : ""; color: "#cfcfcf"; font.pixelSize: 12; elide: Text.ElideRight }
             }
-            Label { text: (blk ? ("Tx:" + blk.txs + "  Out:" + blk.outputs + "  Ker:" + blk.kernels) : "â€”"); color: "#dddddd"; font.pixelSize: 12 }
-            Label { text: (blk && blk.timestamp) ? new Date(blk.timestamp*1000).toLocaleTimeString() : "â€”"; color: "#aaaaaa"; font.pixelSize: 11 }
+            Label { text: (blk ? ("Tx:" + blk.txs + "  Out:" + blk.outputs + "  Ker:" + blk.kernels) : ""); color: "#dddddd"; font.pixelSize: 12 }
+            Label { text: (blk && blk.timestamp) ? new Date(blk.timestamp*1000).toLocaleTimeString() : ""; color: "#aaaaaa"; font.pixelSize: 11 }
             Item { Layout.fillHeight: true }
         }
         MouseArea {
