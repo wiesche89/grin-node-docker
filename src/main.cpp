@@ -129,7 +129,7 @@ int main(int argc, char *argv[])
 #else
     // Desktop-Default: lokaler Controller
     if (controllerBase.isEmpty()) {
-        controllerBase = QStringLiteral("http://127.0.0.1:8080/");
+        controllerBase = QStringLiteral("http://localhost:8080/");
     }
 #endif
 
@@ -138,22 +138,15 @@ int main(int argc, char *argv[])
     }
 
     QUrl controllerBaseUrl(controllerBase);
-    if (!controllerBaseUrl.isValid()) {
-#ifdef Q_OS_WASM
-        controllerBaseUrl = QUrl(QStringLiteral("/api/"));
-#else
-        controllerBaseUrl = QUrl(QStringLiteral("http://127.0.0.1:8080/"));
-#endif
-    }
 
     // v2/owner & v2/foreign darauf aufbauen
-    const QString ownerUrl  = controllerBaseUrl.resolved(QUrl(QStringLiteral("v2/owner"))).toString();
+    const QString ownerUrl = controllerBaseUrl.resolved(QUrl(QStringLiteral("v2/owner"))).toString();
     const QString foreignUrl = controllerBaseUrl.resolved(QUrl(QStringLiteral("v2/foreign"))).toString();
 
     // ------------------------------------------------------------------------------------
     // API-Instanzen
     // ------------------------------------------------------------------------------------
-    NodeOwnerApi  *nodeOwnerApi  = new NodeOwnerApi(ownerUrl, QString(), &app);
+    NodeOwnerApi *nodeOwnerApi = new NodeOwnerApi(ownerUrl, QString(), &app);
     NodeForeignApi *nodeForeignApi = new NodeForeignApi(foreignUrl, QString());
 
     // ------------------------------------------------------------------------------------

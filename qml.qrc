@@ -11,6 +11,8 @@
         <file>qml/Chain.qml</file>
         <file>qml/PeerMarker.qml</file>
         <file>qml/Map.qml</file>
+        <file>qml/DarkButton.qml</file>
+        <file>qml/ErrorOverlay.qml</file>
     </qresource>
     <qresource prefix="/"/>
 </RCC>

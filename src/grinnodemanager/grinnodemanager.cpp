@@ -88,6 +88,7 @@ void GrinNodeManager::getLogsGrinPP(int n)
 // ---------- Public API ----------
 void GrinNodeManager::getStatus()
 {
+    qDebug() << Q_FUNC_INFO;
     QNetworkRequest req = makeRequest("status");
     m_net->get(req);
 }
@@ -109,6 +110,7 @@ void GrinNodeManager::stopStatusPolling()
 // ---------- Core helpers ----------
 void GrinNodeManager::start(NodeKind kind, const QStringList &args)
 {
+    qDebug() << Q_FUNC_INFO;
     QNetworkRequest req = makeRequest("start/" + kindToPath(kind));
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
 
@@ -122,12 +124,14 @@ void GrinNodeManager::start(NodeKind kind, const QStringList &args)
 
 void GrinNodeManager::stop(NodeKind kind)
 {
+    qDebug() << Q_FUNC_INFO;
     QNetworkRequest req = makeRequest("stop/" + kindToPath(kind));
     m_net->post(req, QByteArray());
 }
 
 void GrinNodeManager::restart(NodeKind kind, const QStringList &args)
 {
+    qDebug() << Q_FUNC_INFO;
     QNetworkRequest req = makeRequest("restart/" + kindToPath(kind));
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
 
@@ -141,10 +145,11 @@ void GrinNodeManager::restart(NodeKind kind, const QStringList &args)
 
 void GrinNodeManager::getLogs(NodeKind kind, int n)
 {
+    qDebug() << Q_FUNC_INFO;
     // Query-String direkt an den relativen Pfad hängen
     QNetworkRequest req = makeRequest(QString("logs/%1?n=%2")
-                                          .arg(kindToPath(kind))
-                                          .arg(n));
+                                      .arg(kindToPath(kind))
+                                      .arg(n));
     m_net->get(req);
 }
 
@@ -158,8 +163,9 @@ QNetworkRequest GrinNodeManager::makeRequest(const QString &path) const
 
     // WICHTIG: führenden Slash entfernen, sonst überschreibt
     // QUrl::resolved() den Pfad der baseUrl statt anzuhängen.
-    if (rel.startsWith('/'))
+    if (rel.startsWith('/')) {
         rel.remove(0, 1);
+    }
 
     QUrl relUrl;
     relUrl.setPath(rel);
@@ -174,7 +180,7 @@ QNetworkRequest GrinNodeManager::makeRequest(const QString &path) const
 
     // Debug zum Überprüfen im Log
     // qDebug() << "[GrinNodeManager] makeRequest base=" << base
-    //          << "rel=" << rel << "->" << url;
+    // << "rel=" << rel << "->" << url;
 
     QNetworkRequest req(url);
     req.setRawHeader("User-Agent", m_opts.userAgent);
@@ -200,8 +206,9 @@ void GrinNodeManager::setBaseUrl(const QUrl &u)
     QUrl fixed = u;
 
     // Wenn Pfad leer ist, "/" setzen
-    if (fixed.path().isEmpty())
+    if (fixed.path().isEmpty()) {
         fixed.setPath("/");
+    }
 
     // Pfad immer mit "/" enden lassen, damit resolved() sauber arbeitet
     QString p = fixed.path();
@@ -221,23 +228,24 @@ void GrinNodeManager::setBaseUrl(const QUrl &u)
 // ---------- Reply dispatch ----------
 void GrinNodeManager::onReplyFinished(QNetworkReply *reply)
 {
+    int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
     const QUrl url = reply->request().url();
     const QString path = url.path();
     const QByteArray payload = reply->readAll();
 
     auto finish = [&] {
-        const QString pretty = safePretty(payload);
-        if (pretty != m_lastResponse) {
-            m_lastResponse = pretty;
-            emit lastResponseChanged();
-        }
-    };
+                      const QString pretty = safePretty(payload);
+                      if (pretty != m_lastResponse) {
+                          m_lastResponse = pretty;
+                          emit lastResponseChanged();
+                      }
+                  };
 
-    if (reply->error() != QNetworkReply::NoError) {
-        qDebug() << "[GrinNodeManager] Network error for"
-                 << url.toString() << ":"
-                 << reply->errorString();
+    if (statusCode != 200) {
+        qDebug() << "[GrinNodeManager] Network error: " << statusCode << "    " << path << "    " << payload;
+
         emit errorOccurred(QString("[%1] %2").arg(url.toString(), reply->errorString()));
+
         finish();
         reply->deleteLater();
         return;

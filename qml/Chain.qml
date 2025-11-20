@@ -14,7 +14,6 @@ Item {
 
     // ---------- Settings ----------
     property int  lastCount: 100
-    property bool autoRefresh: true
     property int  refreshIntervalMs: 5000
 
     // ---------- Chain state ----------
@@ -22,7 +21,7 @@ Item {
     property var blocksRaw: []        // volle Objekte inkl. inputs/outputs/kernels
     property var blocks: []           // vereinfachte Kacheldaten (height/hash/â€¦)
 
-    // ---------- Auswahl / Details (Binding-basiert) ----------
+    // ---------- Selection / Details (binding-based) ----------
     property int selectedIndex: -1
 
     // ---------- Helpers ----------
@@ -104,7 +103,7 @@ Item {
         return out
     }
 
-    // ---------- Ableitungen aus Auswahl ----------
+    // ---------- Derivations from selection ----------
     property var selectedRaw: (selectedIndex >= 0 && selectedIndex < blocksRaw.length) ? blocksRaw[selectedIndex] : null
     property var hdrData:     selectedRaw ? mapHeaderFromRaw(selectedRaw)  : null
     property var inputsData:  selectedRaw ? mapInputsFromRaw(selectedRaw)  : []
@@ -132,12 +131,11 @@ Item {
         id: autoTimer
         interval: refreshIntervalMs
         repeat: true
-        running: autoRefresh && nodeRunning && !!foreignApi
+        running: nodeRunning && !!foreignApi
         onTriggered: if (nodeRunning) refreshTip()
     }
 
     onNodeRunningChanged: {
-        autoTimer.running = autoRefresh && nodeRunning && !!foreignApi
         if (nodeRunning && foreignApi) refreshTip()
     }
 
@@ -214,47 +212,11 @@ Item {
                 }
             }
 
-            Row {
-                spacing: 8
-                Layout.alignment: Qt.AlignVCenter
-
-                Switch {
-                    id: autoSw
-                    checked: autoRefresh
-                    onToggled: autoRefresh = checked
-
-                    indicator: Rectangle {
-                        implicitWidth: 42
-                        implicitHeight: 22
-                        radius: 11
-                        color: autoSw.checked ? "#3a6df0" : "#2b2b2b"
-                        border.color: "#555"
-
-                        Rectangle {
-                            anchors.verticalCenter: parent.verticalCenter
-                            x: autoSw.checked ? parent.width - width - 2 : 2
-                            width: 18
-                            height: 18
-                            radius: 9
-                            color: "white"
-                        }
-                    }
-
-                    contentItem: Item { }
-                    background: null
-                }
-
-                Label {
-                    text: autoSw.checked ? "Auto refresh: ON" : "Auto refresh: OFF"
-                    color: "#ddd"
-                    anchors.verticalCenter: autoSw.verticalCenter
-                }
-            }
         }
 
         Label {
             Layout.fillWidth: true
-            text: "Letzte " + lastCount + " BlÃ¶cke (links â†’ rechts). Klicke einen Block fÃ¼r Details."
+            text: "Last " + lastCount + " blocks (left → right). Tap a block for details."
             color: "#bbbbbb"
         }
 
@@ -291,7 +253,7 @@ Item {
                         }
                     }
 
-                    // Scroll sofort nach rechts, wenn die Breite neu berechnet wurde
+                    // Scroll immediately to the right when the width changes
                     onImplicitWidthChanged: {
                         if (blocks.length > 0) {
                             flick.contentX = Math.max(0, flick.contentWidth - flick.width)
@@ -317,7 +279,7 @@ Item {
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 8
-                    Label { text: "Details fÃ¼r Block"; color: "#bbb" }
+                    Label { text: "Block details"; color: "#bbb" }
                     Label { text: detailsHeight >= 0 ? ("#" + detailsHeight) : "â€”"; color: "white"; font.bold: true }
                     Item { Layout.fillWidth: true }
                 }
@@ -504,7 +466,7 @@ Item {
 
         Label {
             visible: blocks.length === 0 && tip.height === 0
-            text: "Lade Tip â€¦"
+            text: "Loading tip..."
             color: "#888"
             horizontalAlignment: Text.AlignHCenter
             Layout.fillWidth: true
@@ -598,4 +560,3 @@ Item {
         Timer { id: hideTimer; interval: 4000; running: false; onTriggered: sb.message = "" }
     }
 }
-

@@ -6,8 +6,10 @@ import QtQuick.Window 2.15
 ApplicationWindow {
     id: root
     visible: true
-    width: Math.min(Screen.width, 1700)
-    height: Math.min(Screen.height, 1024)
+    property real usableScreenWidth: (Qt.application.primaryScreen ? Qt.application.primaryScreen.availableGeometry.width : Screen.width)
+    property real usableScreenHeight: (Qt.application.primaryScreen ? Qt.application.primaryScreen.availableGeometry.height : Screen.height)
+    width: Math.min(usableScreenWidth, 1700)
+    height: Math.min(usableScreenHeight, 1024)
     minimumWidth: 360
     minimumHeight: 600
     title: "GrinNode"

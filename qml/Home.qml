@@ -8,10 +8,11 @@ Item {
     Layout.fillWidth: true
     Layout.fillHeight: true
     property bool compactLayout: false
+    property int headingFontSize: 20
+    property int bodyFontSize: 16
 
     // Basis-URL fÃ¼r den Controller:
     // - im WASM-Build: /api/  (wird von Nginx zum Controller proxied)
-    // - Desktop:       http://127.0.0.1:8080/
     property url controllerApiUrl: {
         var base = ""
 
@@ -23,7 +24,7 @@ Item {
             if (Qt.platform.os === "wasm" || Qt.platform.os === "wasm-emscripten")
                 base = "/api/"
             else
-                base = "http://127.0.0.1:8080/"
+                base = "localhost:8080/"
         }
 
         if (!base.endsWith("/"))
@@ -40,31 +41,50 @@ Item {
     property string nodeState: "none"        // "none" | "rustStarting" | "grinppStarting" | "rust" | "grinpp"
     property bool nodeRunning: isRustRunning() || isGrinppRunning()
     property bool controllerError: false
+    property string controllerErrorMessage: ""
 
     function isRustRunning()   { return nodeState === "rust"; }
     function isGrinppRunning() { return nodeState === "grinpp"; }
     function isStarting()      { return nodeState === "rustStarting" || nodeState === "grinppStarting"; }
+    function applyControllerStatus(statusObj) {
+        if (!statusObj || !statusObj.nodes)
+            return
+
+        var nodes = statusObj.nodes
+        if (nodes.rust && nodes.rust.running) {
+            homeRoot.nodeState = "rust"
+        } else if (nodes.grinpp && nodes.grinpp.running) {
+            homeRoot.nodeState = "grinpp"
+        } else if (homeRoot.nodeState !== "none") {
+            homeRoot.nodeState = "none"
+        }
+        controllerError = false
+        controllerErrorOverlay.visible = false
+    }
 
     // ---------------------------------------------
     // Grin Node Controller Client
     // ---------------------------------------------
     GrinNodeManager {
         id: mgr
-        baseUrl: controllerApiUrl    // z.B. "/api/" oder "http://127.0.0.1:8080/"
+        baseUrl: controllerApiUrl
         username: ""
         password: ""
+        Component.onCompleted: mgr.getStatus()
 
         onNodeStarted: function(kind) {
             console.log("QML: nodeStarted signal received, kind=", kind)
             homeRoot.nodeState = (kind === GrinNodeManager.Rust) ? "rust" : "grinpp"
             bootTimer.restart()
             controllerError = false
+            controllerErrorOverlay.visible = false
         }
 
         onNodeRestarted: function(kind) {
             homeRoot.nodeState = (kind === GrinNodeManager.Rust) ? "rust" : "grinpp"
             bootTimer.restart()
             controllerError = false
+            controllerErrorOverlay.visible = false
         }
 
         onNodeStopped: function(kind) {
@@ -77,16 +97,20 @@ Item {
             }
         }
 
+        onStatusReceived: function(statusObj) {
+            applyControllerStatus(statusObj)
+        }
+
         onErrorOccurred: function(msg) {
             console.log("QML: errorOccurred", msg)
             controllerError = true
+            controllerErrorOverlay.visible = true
+            controllerErrorMessage = msg
             if (homeRoot.nodeState === "rustStarting" || homeRoot.nodeState === "grinppStarting")
                 homeRoot.nodeState = "none"
         }
 
         onLastResponseChanged: {
-            responseField.text = mgr.lastResponse
-
             if (!mgr.lastResponse || mgr.lastResponse === "")
                 return
 
@@ -94,25 +118,11 @@ Item {
                 var obj = JSON.parse(mgr.lastResponse)
 
                 if (obj && obj.status && typeof obj.status === "object") {
-                    var st = obj.status
-                    var running = st.running === true
-                    var id = st.id || ""
+                    applyControllerStatus(obj.status)
 
-                    if (running) {
-                        if (id === "rust")
-                            homeRoot.nodeState = "rust"
-                        else if (id === "grinpp")
-                            homeRoot.nodeState = "grinpp"
-
-                        controllerError = false
-
-                        if (!bootTimer.running) {
-                            console.log("BootTimer gestartet Ã¼ber lastResponse")
-                            bootTimer.restart()
-                        }
-                    } else {
-                        if (homeRoot.nodeState === "rust" || homeRoot.nodeState === "grinpp")
-                            homeRoot.nodeState = "none"
+                    if (!bootTimer.running) {
+                        console.log("BootTimer gestartet über lastResponse")
+                        bootTimer.restart()
                     }
                 }
             } catch (e) {
@@ -142,38 +152,6 @@ Item {
     }
 
     // ---------------------------------------------
-    // Dark Button-Komponente
-    // ---------------------------------------------
-    Component {
-        id: darkButtonComponent
-        Button {
-            id: control
-            implicitHeight: 46
-            implicitWidth: 160
-            anchors.fill: parent
-            property color bg: hovered ? "#3a3a3a" : "#2b2b2b"
-            property color fg: enabled ? "white" : "#777"
-            flat: true
-            padding: 10
-
-            background: Rectangle {
-                radius: 6
-                color: control.down ? "#2f2f2f" : control.bg
-                border.color: control.down ? "#66aaff" : "#555"
-                border.width: 1
-            }
-            contentItem: Text {
-                text: control.text
-                color: control.fg
-                font.pixelSize: 14
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
-                elide: Text.ElideRight
-            }
-        }
-    }
-
-        // ---------------------------------------------
     // Layout
     // ---------------------------------------------
     ScrollView {
@@ -202,14 +180,14 @@ Item {
                     Text {
                         text: "Grin Node Dashboard"
                         color: "white"
-                        font.pixelSize: homeRoot.compactLayout ? 22 : 28
+                        font.pixelSize: homeRoot.compactLayout ? headingFontSize - 2 : headingFontSize
                         font.bold: true
                     }
 
                     Text {
                         text: "Manage and monitor both Rust and Grin++ nodes"
                         color: "#cccccc"
-                        font.pixelSize: 14
+                        font.pixelSize: bodyFontSize
                         visible: !homeRoot.compactLayout
                     }
                 }
@@ -233,7 +211,7 @@ Item {
                             Text {
                                 text: "Rust Node"
                                 color: "#f0f0f0"
-                                font.pixelSize: 16
+                                font.pixelSize: headingFontSize
                                 font.bold: true
                             }
 
@@ -243,82 +221,35 @@ Item {
                                 columnSpacing: 8
                                 rowSpacing: 8
 
-                                Loader {
-                                    id: startRustBtn
+                                DarkButton {
                                     Layout.fillWidth: true
                                     Layout.preferredWidth: 200
                                     Layout.preferredHeight: 52
-                                    sourceComponent: darkButtonComponent
-                                    onLoaded: {
-                                        if (!startRustBtn.item) return
-                                        startRustBtn.item.text = (homeRoot.nodeState === "rustStarting")
-                                                ? "Starting..."
-                                                : "Start"
-                                        startRustBtn.item.enabled = (homeRoot.nodeState === "none")
-                                        startRustBtn.item.clicked.connect(function () {
-                                            if (homeRoot.nodeState !== "none") return
-                                            homeRoot.nodeState = "rustStarting"
-                                            mgr.startRust([])
-                                        })
-                                        startRustBtn.item.width = startRustBtn.width
-                                    }
-                                    onWidthChanged: if (item) item.width = width
-                                    Connections {
-                                        target: homeRoot
-                                        function onNodeStateChanged() {
-                                            if (!startRustBtn.item) return
-                                            startRustBtn.item.text = (homeRoot.nodeState === "rustStarting")
-                                                    ? "Starting..."
-                                                    : "Start"
-                                            startRustBtn.item.enabled = (homeRoot.nodeState === "none")
-                                        }
+                                    text: homeRoot.nodeState === "rustStarting" ? "Starting..." : "Start"
+                                    enabled: homeRoot.nodeState === "none"
+                                    onClicked: {
+                                        if (homeRoot.nodeState !== "none") return
+                                        homeRoot.nodeState = "rustStarting"
+                                        mgr.startRust([])
                                     }
                                 }
 
-                                Loader {
-                                    id: restartRustBtn
+                                DarkButton {
                                     Layout.fillWidth: true
                                     Layout.preferredWidth: 200
                                     Layout.preferredHeight: 52
-                                    sourceComponent: darkButtonComponent
-                                    onLoaded: {
-                                        if (!restartRustBtn.item) return
-                                        restartRustBtn.item.text = "Restart"
-                                        restartRustBtn.item.enabled = (homeRoot.nodeState === "rust")
-                                        restartRustBtn.item.clicked.connect(function () { mgr.restartRust([]) })
-                                        restartRustBtn.item.width = restartRustBtn.width
-                                    }
-                                    onWidthChanged: if (item) item.width = width
-                                    Connections {
-                                        target: homeRoot
-                                        function onNodeStateChanged() {
-                                            if (!restartRustBtn.item) return
-                                            restartRustBtn.item.enabled = (homeRoot.nodeState === "rust")
-                                        }
-                                    }
+                                    text: "Restart"
+                                    enabled: homeRoot.nodeState === "rust"
+                                    onClicked: mgr.restartRust([])
                                 }
 
-                                Loader {
-                                    id: stopRustBtn
+                                DarkButton {
                                     Layout.fillWidth: true
                                     Layout.preferredWidth: 200
                                     Layout.preferredHeight: 52
-                                    sourceComponent: darkButtonComponent
-                                    onLoaded: {
-                                        if (!stopRustBtn.item) return
-                                        stopRustBtn.item.text = "Stop"
-                                        stopRustBtn.item.enabled = (homeRoot.nodeState === "rust")
-                                        stopRustBtn.item.clicked.connect(function () { mgr.stopRust() })
-                                        stopRustBtn.item.width = stopRustBtn.width
-                                    }
-                                    onWidthChanged: if (item) item.width = width
-                                    Connections {
-                                        target: homeRoot
-                                        function onNodeStateChanged() {
-                                            if (!stopRustBtn.item) return
-                                            stopRustBtn.item.enabled = (homeRoot.nodeState === "rust")
-                                        }
-                                    }
+                                    text: "Stop"
+                                    enabled: homeRoot.nodeState === "rust"
+                                    onClicked: mgr.stopRust()
                                 }
                             }
                         }
@@ -330,7 +261,7 @@ Item {
                             Text {
                                 text: "Grin++ Node"
                                 color: "#f0f0f0"
-                                font.pixelSize: 16
+                                font.pixelSize: headingFontSize
                                 font.bold: true
                             }
 
@@ -340,210 +271,77 @@ Item {
                                 columnSpacing: 8
                                 rowSpacing: 8
 
-                                Loader {
-                                    id: startGrinppBtn
+                                DarkButton {
                                     Layout.fillWidth: true
                                     Layout.preferredWidth: 200
                                     Layout.preferredHeight: 52
-                                    sourceComponent: darkButtonComponent
-                                    onLoaded: {
-                                        if (!startGrinppBtn.item) return
-                                        startGrinppBtn.item.text = (homeRoot.nodeState === "grinppStarting")
-                                                ? "Starting..."
-                                                : "Start"
-                                        startGrinppBtn.item.enabled = (homeRoot.nodeState === "none")
-                                        startGrinppBtn.item.clicked.connect(function () {
-                                            if (homeRoot.nodeState !== "none") return
-                                            homeRoot.nodeState = "grinppStarting"
-                                            mgr.startGrinPP([])
-                                        })
-                                        startGrinppBtn.item.width = startGrinppBtn.width
-                                    }
-                                    onWidthChanged: if (item) item.width = width
-                                    Connections {
-                                        target: homeRoot
-                                        function onNodeStateChanged() {
-                                            if (!startGrinppBtn.item) return
-                                            startGrinppBtn.item.text = (homeRoot.nodeState === "grinppStarting")
-                                                    ? "Starting..."
-                                                    : "Start"
-                                            startGrinppBtn.item.enabled = (homeRoot.nodeState === "none")
-                                        }
+                                    text: homeRoot.nodeState === "grinppStarting" ? "Starting..." : "Start"
+                                    enabled: homeRoot.nodeState === "none"
+                                    onClicked: {
+                                        if (homeRoot.nodeState !== "none") return
+                                        homeRoot.nodeState = "grinppStarting"
+                                        mgr.startGrinPP([])
                                     }
                                 }
 
-                                Loader {
-                                    id: restartGrinppBtn
+                                DarkButton {
                                     Layout.fillWidth: true
                                     Layout.preferredWidth: 200
                                     Layout.preferredHeight: 52
-                                    sourceComponent: darkButtonComponent
-                                    onLoaded: {
-                                        if (!restartGrinppBtn.item) return
-                                        restartGrinppBtn.item.text = "Restart"
-                                        restartGrinppBtn.item.enabled = (homeRoot.nodeState === "grinpp")
-                                        restartGrinppBtn.item.clicked.connect(function () { mgr.restartGrinPP([]) })
-                                        restartGrinppBtn.item.width = restartGrinppBtn.width
-                                    }
-                                    onWidthChanged: if (item) item.width = width
-                                    Connections {
-                                        target: homeRoot
-                                        function onNodeStateChanged() {
-                                            if (!restartGrinppBtn.item) return
-                                            restartGrinppBtn.item.enabled = (homeRoot.nodeState === "grinpp")
-                                        }
-                                    }
+                                    text: "Restart"
+                                    enabled: homeRoot.nodeState === "grinpp"
+                                    onClicked: mgr.restartGrinPP([])
                                 }
 
-                                Loader {
-                                    id: stopGrinppBtn
+                                DarkButton {
                                     Layout.fillWidth: true
                                     Layout.preferredWidth: 200
                                     Layout.preferredHeight: 52
-                                    sourceComponent: darkButtonComponent
-                                    onLoaded: {
-                                        if (!stopGrinppBtn.item) return
-                                        stopGrinppBtn.item.text = "Stop"
-                                        stopGrinppBtn.item.enabled = (homeRoot.nodeState === "grinpp")
-                                        stopGrinppBtn.item.clicked.connect(function () { mgr.stopGrinPP() })
-                                        stopGrinppBtn.item.width = stopGrinppBtn.width
-                                    }
-                                    onWidthChanged: if (item) item.width = width
-                                    Connections {
-                                        target: homeRoot
-                                        function onNodeStateChanged() {
-                                            if (!stopGrinppBtn.item) return
-                                            stopGrinppBtn.item.enabled = (homeRoot.nodeState === "grinpp")
-                                        }
-                                    }
+                                    text: "Stop"
+                                    enabled: homeRoot.nodeState === "grinpp"
+                                    onClicked: mgr.stopGrinPP()
                                 }
                             }
                         }
                     }
 
-                    // Response-Log
-                    ScrollView {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 160
-                        clip: true
-
-                        background: Rectangle {
-                            color: "#2b2b2b"
-                            radius: 6
-                            border.color: "#555"
-                            border.width: 1
-                        }
-
-                        ScrollBar.vertical: ScrollBar {
-                            id: vbar
-                            policy: ScrollBar.AsNeeded
-                            contentItem: Rectangle {
-                                implicitWidth: 6
-                                radius: 3
-                                color: vbar.pressed ? "#777" : (vbar.hovered ? "#666" : "#444")
-                            }
-                            background: Rectangle { color: "transparent" }
-                        }
-                        ScrollBar.horizontal: ScrollBar {
-                            id: hbar
-                            policy: ScrollBar.AsNeeded
-                            contentItem: Rectangle {
-                                implicitHeight: 6
-                                radius: 3
-                                color: hbar.pressed ? "#777" : (hbar.hovered ? "#666" : "#444")
-                            }
-                            background: Rectangle { color: "transparent" }
-                        }
-
-                        TextArea {
-                            id: responseField
-                            readOnly: true
-                            wrapMode: TextEdit.NoWrap
-                            textFormat: TextEdit.PlainText
-                            color: "white"
-                            selectionColor: "#295d9b"
-                            selectedTextColor: "white"
-                            font.family: "Consolas"
-                            font.pixelSize: 12
-                            background: null
-                        }
-                    }
                 }
 
                 // STATUS + PEERS
-                StatusView {
+                GridLayout {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 200
-                }
+                    columns: 1
+                    columnSpacing: 0
+                    rowSpacing: 16
 
-                PeerListView {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 320
-                    Layout.minimumHeight: 240
-                }
-            }
-        }
-    }
+                    StatusView {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 360
+                        Layout.minimumHeight: 280
+                    }
 
-    // ---------------------------------------------
-    // Fehler-Overlay (Controller nicht erreichbar)
-    // ---------------------------------------------
-    Rectangle {
-        id: controllerErrorOverlay
-        width: parent ? parent.width * 0.6 : 400
-        height: 140
-        anchors.horizontalCenter: parent ? parent.horizontalCenter : undefined
-        anchors.bottom: parent ? parent.bottom : undefined
-        anchors.bottomMargin: 20
-        color: "#050000"
-        visible: controllerError
-        z: 99
-        opacity: 0.85
-        radius: 12
-        border.color: "#660000"
-        border.width: 1
-
-        Column {
-            anchors.fill: parent
-            anchors.margins: 16
-            spacing: 8
-            anchors.horizontalCenter: parent.horizontalCenter
-
-            Text {
-                text: "Controller-API not available"
-                color: "white"
-                font.pixelSize: 18
-                wrapMode: Text.Wrap
-                anchors.horizontalCenter: parent.horizontalCenter
-            }
-
-            Text {
-                text: "Retry if Controller-Api runs"
-                color: "#ccc"
-                font.pixelSize: 13
-                wrapMode: Text.Wrap
-                anchors.horizontalCenter: parent.horizontalCenter
-            }
-
-            Row {
-                anchors.horizontalCenter: parent.horizontalCenter
-                spacing: 12
-
-                Button {
-                    text: "Erneut verbinden"
-                    onClicked: {
-                        controllerError = false
-                        mgr.getStatus()
+                    PeerListView {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 360
+                        Layout.minimumHeight: 280
                     }
                 }
-
-                Button {
-                    text: "Ignorieren"
-                    onClicked: controllerError = false
-                }
             }
         }
     }
+
+        ErrorOverlay {
+            id: controllerErrorOverlay
+            message: controllerErrorMessage
+            onRetry: {
+                controllerError = false
+                controllerErrorOverlay.visible = false
+            }
+            onIgnore: {
+                controllerError = false
+                controllerErrorOverlay.visible = false
+            }
+        }
 }
 
 

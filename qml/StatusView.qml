@@ -25,6 +25,8 @@ Rectangle {
     // komplette Datenstruktur aus C++
     property var currentStatus: null
     property string lastUpdated: ""
+    property int headingFontSize: 20
+    property int dataFontSize: 16
     property bool compactLayout: root.width < 640
 
     // ---------- Helper ----------
@@ -251,7 +253,7 @@ Rectangle {
             spacing: 8
             Label {
                 text: "Node Status"
-                font.pixelSize: 20
+                font.pixelSize: headingFontSize
                 font.bold: true
                 color: "#ffffff"
                 Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
@@ -259,7 +261,7 @@ Rectangle {
             Item { Layout.fillWidth: true }
             Label {
                 text: lastUpdated !== "" ? "Last Update: " + lastUpdated : ""
-                font.pixelSize: 14
+                font.pixelSize: dataFontSize
                 color: "#aaaaaa"
                 Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
             }
@@ -268,229 +270,399 @@ Rectangle {
         Rectangle { height: 1; color: "#555"; Layout.fillWidth: true }
 
         // Zwei Spalten
-        GridLayout {
+        ScrollView {
+            id: statusScrollView
             Layout.fillWidth: true
-            columns: compactLayout ? 1 : 2
-            columnSpacing: compactLayout ? 0 : 40
-            rowSpacing: 12
+            Layout.preferredHeight: 360
+            clip: true
+            ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AsNeeded }
+            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
 
-            // Linke Spalte
-            ColumnLayout {
+            GridLayout {
+                id: statusGrid
+                width: Math.max(statusScrollView.width, 640)
                 Layout.fillWidth: true
-                spacing: 6
+                columns: compactLayout ? 1 : 2
+                columnSpacing: compactLayout ? 0 : 40
+                rowSpacing: 12
 
-                RowLayout {
-                    Label { text: "Chain:"; font.bold: true; color: "#ddd"; Layout.preferredWidth: 130 }
-                    Label { text: currentStatus ? (currentStatus.chain || "") : ""; color: "white"; Layout.fillWidth: true }
-                }
-                RowLayout {
-                    Label { text: "Protocol Version:"; font.bold: true; color: "#ddd"; Layout.preferredWidth: 130 }
-                    Label { text: currentStatus ? String(currentStatus.protocolVersion || currentStatus.protocol_version || "") : ""; color: "white"; Layout.fillWidth: true }
-                }
-                RowLayout {
-                    Label { text: "User Agent:"; font.bold: true; color: "#ddd"; Layout.preferredWidth: 130 }
-                    Label {
-                        text: currentStatus ? (currentStatus.userAgent || currentStatus.user_agent || "") : ""
-                        color: "white"; Layout.fillWidth: true; elide: Text.ElideRight
+                // Linke Spalte
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 6
+
+                    RowLayout {
+                        Label {
+                            text: "Chain:"
+                            font.pixelSize: dataFontSize
+                            font.bold: true
+                            color: "#ddd"
+                            Layout.preferredWidth: 130
+                        }
+                        Label {
+                            text: currentStatus ? (currentStatus.chain || "") : ""
+                            font.pixelSize: dataFontSize
+                            color: "white"
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                        }
                     }
-                }
-                RowLayout {
-                    Label { text: "Sync Status:"; font.bold: true; color: "#ddd"; Layout.preferredWidth: 130 }
-                    Label {
-                        text: currentStatus ? _syncStatusDisplay : ""
-                        color: "white"
+                    RowLayout {
+                        Label {
+                            text: "Protocol Version:"
+                            font.pixelSize: dataFontSize
+                            font.bold: true
+                            color: "#ddd"
+                            Layout.preferredWidth: 130
+                        }
+                        Label {
+                            text: currentStatus ? String(currentStatus.protocolVersion || currentStatus.protocol_version || "") : ""
+                            font.pixelSize: dataFontSize
+                            color: "white"
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                        }
+                    }
+                    RowLayout {
+                        Label {
+                            text: "User Agent:"
+                            font.pixelSize: dataFontSize
+                            font.bold: true
+                            color: "#ddd"
+                            Layout.preferredWidth: 130
+                        }
+                        Label {
+                            text: currentStatus ? (currentStatus.userAgent || currentStatus.user_agent || "") : ""
+                            font.pixelSize: dataFontSize
+                            color: "white"
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                        }
+                    }
+                    RowLayout {
+                        Label {
+                            text: "Sync Status:"
+                            font.pixelSize: dataFontSize
+                            font.bold: true
+                            color: "#ddd"
+                            Layout.preferredWidth: 130
+                        }
+                        Label {
+                            text: currentStatus ? _syncStatusDisplay : ""
+                            font.pixelSize: dataFontSize
+                            color: "white"
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                        }
+                    }
+                    RowLayout {
                         Layout.fillWidth: true
-                        wrapMode: Text.WordWrap
-                    }
-                }
-
-                // --- header_sync (Info) ---
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 8
-                    visible: _showHeaderSync
-                    Label { text: "Sync Info:"; font.bold: true; color: "#ddd"; Layout.preferredWidth: 130 }
-                    RowLayout {
-                        Layout.fillWidth: true; spacing: 10
-                        Label { text: _hdrPct; color: "white"; font.pixelSize: 16; font.bold: true }
-                        Label { text: "(" + String(_hdrCur) + " / " + String(_hdrMax) + ")"; color: "#999"; font.pixelSize: 12 }
-                    }
-                }
-
-                // --- PIBD (Info) ---
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 8
-                    visible: _showPibd
-                    Label { text: "Sync Info:"; font.bold: true; color: "#ddd"; Layout.preferredWidth: 130 }
-                    RowLayout {
-                        Layout.fillWidth: true; spacing: 10
-                        Label { text: _pibdPct; color: "white"; font.pixelSize: 16; font.bold: true }
-                        Label { text: "(" + String(_pibdDone) + " / " + String(_pibdTotal) + ")"; color: "#999"; font.pixelSize: 12 }
-                    }
-                }
-
-                // --- txhashset_download (Info) ---
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 8
-                    visible: _showTxdlActive && _txdlHasTotal
-                    Label { text: "Sync Info:"; font.bold: true; color: "#ddd"; Layout.preferredWidth: 130 }
-                    ColumnLayout {
-                        spacing: 2
+                        spacing: 8
+                        visible: _showHeaderSync
+                        Label {
+                            text: "Sync Info:"
+                            font.pixelSize: dataFontSize
+                            font.bold: true
+                            color: "#ddd"
+                            Layout.preferredWidth: 130
+                        }
                         RowLayout {
+                            Layout.fillWidth: true
                             spacing: 10
-                            Label { text: _txdlPct; color: "white"; font.pixelSize: 16; font.bold: true }
                             Label {
-                                text: "(" + bytesToMB(_txdlDone) + " / " + bytesToMB(_txdlTotal) + " MB)"
-                                color: "#999"; font.pixelSize: 12
+                                text: _hdrPct
+                                font.pixelSize: dataFontSize
+                                font.bold: true
+                                color: "white"
+                            }
+                            Label {
+                                text: "(" + String(_hdrCur) + " / " + String(_hdrMax) + ")"
+                                font.pixelSize: dataFontSize
+                                color: "#999"
                             }
                         }
-                        Label {
-                            text: "Downloading chain state: " + _txdlPct + " at " + _txdlSpeedText + " (kB/s)"
-                            color: "#bbb"; font.pixelSize: 12
-                        }
                     }
-                }
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 8
-                    visible: _showTxdlActive && !_txdlHasTotal
-                    Label { text: "Sync Info:"; font.bold: true; color: "#ddd"; Layout.preferredWidth: 130 }
-                    Label {
-                        text: "Downloading chain state for state sync. Waiting remote peer to start: " + _txdlWaitingSecs + "s"
-                        color: "#bbb"; font.pixelSize: 12
+                    RowLayout {
                         Layout.fillWidth: true
+                        spacing: 8
+                        visible: _showPibd
+                        Label {
+                            text: "Sync Info:"
+                            font.pixelSize: dataFontSize
+                            font.bold: true
+                            color: "#ddd"
+                            Layout.preferredWidth: 130
+                        }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 10
+                            Label {
+                                text: _pibdPct
+                                font.pixelSize: dataFontSize
+                                font.bold: true
+                                color: "white"
+                            }
+                            Label {
+                                text: "(" + String(_pibdDone) + " / " + String(_pibdTotal) + ")"
+                                font.pixelSize: dataFontSize
+                                color: "#999"
+                            }
+                        }
                     }
-                }
-
-                // --- txhashset_setup (Info) ---
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 8
-                    visible: _showSetup
-                    Label { text: "Sync Info:"; font.bold: true; color: "#ddd"; Layout.preferredWidth: 130 }
-                    Label {
-                        text: "Sync step 3/7: " + (
-                              _setupHasHeaders
-                            ? "Preparing for validation (kernel history)"
-                            : _setupHasKernelPos
-                                ? "Preparing for validation (kernel position)"
-                                : "Preparing chain state for validation"
-                          )
-                        color: "#bbb"; font.pixelSize: 12
+                    RowLayout {
                         Layout.fillWidth: true
-                        wrapMode: Text.WordWrap
-                    }
-                }
-
-                // --- rangeproofs (Info) ---
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 8
-                    visible: _showRangeProofs
-                    Label { text: "Sync Info:"; font.bold: true; color: "#ddd"; Layout.preferredWidth: 130 }
-                    RowLayout {
                         spacing: 8
+                        visible: _showTxdlActive && _txdlHasTotal
                         Label {
-                            text: "Sync step 4/7: Validating chain state - range proofs: " + _rpPct
-                            color: "#bbb"; font.pixelSize: 12
+                            text: "Sync Info:"
+                            font.pixelSize: dataFontSize
+                            font.bold: true
+                            color: "#ddd"
+                            Layout.preferredWidth: 130
                         }
-                        Label {
-                            visible: isFinite(Number(_rpTotal)) && Number(_rpTotal) > 0
-                            text: "(" + String(_rpCount) + " / " + String(_rpTotal) + ")"
-                            color: "#999"; font.pixelSize: 12
+                        ColumnLayout {
+                            spacing: 2
+                            RowLayout {
+                                spacing: 10
+                                Label {
+                                    text: _txdlPct
+                                    font.pixelSize: dataFontSize
+                                    font.bold: true
+                                    color: "white"
+                                }
+                                Label {
+                                    text: "(" + bytesToMB(_txdlDone) + " / " + bytesToMB(_txdlTotal) + " MB)"
+                                    font.pixelSize: dataFontSize
+                                    color: "#999"
+                                }
+                            }
+                            Label {
+                                text: "Downloading chain state: " + _txdlPct + " at " + _txdlSpeedText + " (kB/s)"
+                                font.pixelSize: dataFontSize
+                                color: "#bbb"
+                            }
                         }
                     }
-                }
-
-                // --- kernels (Info) ---
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 8
-                    visible: _showKernels
-                    Label { text: "Sync Info:"; font.bold: true; color: "#ddd"; Layout.preferredWidth: 130 }
                     RowLayout {
+                        Layout.fillWidth: true
                         spacing: 8
+                        visible: _showTxdlActive && !_txdlHasTotal
                         Label {
-                            text: "Sync step 5/7: Validating chain state - kernels: " + _kvPct
-                            color: "#bbb"; font.pixelSize: 12
+                            text: "Sync Info:"
+                            font.pixelSize: dataFontSize
+                            font.bold: true
+                            color: "#ddd"
+                            Layout.preferredWidth: 130
                         }
                         Label {
-                            visible: isFinite(Number(_kvTotal)) && Number(_kvTotal) > 0
-                            text: "(" + String(_kvCount) + " / " + String(_kvTotal) + ")"
-                            color: "#999"; font.pixelSize: 12
+                            text: "Downloading chain state for state sync. Waiting remote peer to start: " + _txdlWaitingSecs + "s"
+                            font.pixelSize: dataFontSize
+                            color: "#bbb"
+                            Layout.fillWidth: true
                         }
                     }
-                }
-
-                // --- body_sync (Info) ---
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 8
-                    visible: _showBody
-                    Label { text: "Sync Info:"; font.bold: true; color: "#ddd"; Layout.preferredWidth: 130 }
                     RowLayout {
-                        Layout.fillWidth: true; spacing: 10
+                        Layout.fillWidth: true
+                        spacing: 8
+                        visible: _showSetup
                         Label {
-                            text: "Sync step 7/7: Downloading blocks: " + _bodyPct
-                            color: "#bbb"; font.pixelSize: 12
+                            text: "Sync Info:"
+                            font.pixelSize: dataFontSize
+                            font.bold: true
+                            color: "#ddd"
+                            Layout.preferredWidth: 130
                         }
                         Label {
-                            visible: isFinite(Number(_bodyMax)) && Number(_bodyMax) > 0
-                            text: "(" + String(_bodyCur) + " / " + String(_bodyMax) + ")"
-                            color: "#999"; font.pixelSize: 12
+                            text: "Sync step 3/7: " + (
+                                  _setupHasHeaders
+                                ? "Preparing for validation (kernel history)"
+                                : _setupHasKernelPos
+                                    ? "Preparing for validation (kernel position)"
+                                    : "Preparing chain state for validation"
+                              )
+                            font.pixelSize: dataFontSize
+                            color: "#bbb"
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                        }
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
+                        visible: _showRangeProofs
+                        Label {
+                            text: "Sync Info:"
+                            font.pixelSize: dataFontSize
+                            font.bold: true
+                            color: "#ddd"
+                            Layout.preferredWidth: 130
+                        }
+                        RowLayout {
+                            spacing: 8
+                            Label {
+                                text: "Sync step 4/7: Validating chain state - range proofs: " + _rpPct
+                                font.pixelSize: dataFontSize
+                                color: "#bbb"
+                            }
+                            Label {
+                                visible: isFinite(Number(_rpTotal)) && Number(_rpTotal) > 0
+                                text: "(" + String(_rpCount) + " / " + String(_rpTotal) + ")"
+                                font.pixelSize: dataFontSize
+                                color: "#999"
+                            }
+                        }
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
+                        visible: _showKernels
+                        Label {
+                            text: "Sync Info:"
+                            font.pixelSize: dataFontSize
+                            font.bold: true
+                            color: "#ddd"
+                            Layout.preferredWidth: 130
+                        }
+                        RowLayout {
+                            spacing: 8
+                            Label {
+                                text: "Sync step 5/7: Validating chain state - kernels: " + _kvPct
+                                font.pixelSize: dataFontSize
+                                color: "#bbb"
+                            }
+                            Label {
+                                visible: isFinite(Number(_kvTotal)) && Number(_kvTotal) > 0
+                                text: "(" + String(_kvCount) + " / " + String(_kvTotal) + ")"
+                                font.pixelSize: dataFontSize
+                                color: "#999"
+                            }
+                        }
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
+                        visible: _showBody
+                        Label {
+                            text: "Sync Info:"
+                            font.pixelSize: dataFontSize
+                            font.bold: true
+                            color: "#ddd"
+                            Layout.preferredWidth: 130
+                        }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 10
+                            Label {
+                                text: "Sync step 7/7: Downloading blocks: " + _bodyPct
+                                font.pixelSize: dataFontSize
+                                color: "#bbb"
+                            }
+                            Label {
+                                visible: isFinite(Number(_bodyMax)) && Number(_bodyMax) > 0
+                                text: "(" + String(_bodyCur) + " / " + String(_bodyMax) + ")"
+                                font.pixelSize: dataFontSize
+                                color: "#999"
+                            }
                         }
                     }
                 }
-            }
 
-            // Rechte Spalte
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 6
+                // Rechte Spalte
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 6
 
-                RowLayout {
-                    Label { text: "Connections:"; font.bold: true; color: "#ddd"; Layout.preferredWidth: 130 }
-                    Label { text: currentStatus ? String(currentStatus.connections || 0) : ""; color: "white"; Layout.fillWidth: true }
-                }
-                RowLayout {
-                    Label { text: "Height:"; font.bold: true; color: "#ddd"; Layout.preferredWidth: 130 }
-                    Label {
-                        text: currentStatus && currentStatus.tip ? String(currentStatus.tip.height || 0) : ""
-                        color: "white"; Layout.fillWidth: true
+                    RowLayout {
+                        Label {
+                            text: "Connections:"
+                            font.pixelSize: dataFontSize
+                            font.bold: true
+                            color: "#ddd"
+                            Layout.preferredWidth: 130
+                        }
+                        Label {
+                            text: currentStatus ? String(currentStatus.connections || 0) : ""
+                            font.pixelSize: dataFontSize
+                            color: "white"
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                        }
                     }
-                }
-                RowLayout {
-                    Label { text: "Last Block:"; font.bold: true; color: "#ddd"; Layout.preferredWidth: 130 }
-                    Label {
-                        text: currentStatus && currentStatus.tip
-                              ? (currentStatus.tip.lastBlockPushed || currentStatus.tip.last_block_pushed || "")
-                              : ""
-                        color: "white"; Layout.fillWidth: true; elide: Text.ElideRight
+                    RowLayout {
+                        Label {
+                            text: "Height:"
+                            font.pixelSize: dataFontSize
+                            font.bold: true
+                            color: "#ddd"
+                            Layout.preferredWidth: 130
+                        }
+                        Label {
+                            text: currentStatus && currentStatus.tip ? String(currentStatus.tip.height || 0) : ""
+                            font.pixelSize: dataFontSize
+                            color: "white"
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                        }
                     }
-                }
-                RowLayout {
-                    Label { text: "Prev Block:"; font.bold: true; color: "#ddd"; Layout.preferredWidth: 130 }
-                    Label {
-                        text: currentStatus && currentStatus.tip
-                              ? (currentStatus.tip.prevBlockToLast || currentStatus.tip.prev_block_to_last || "")
-                              : ""
-                        color: "white"; Layout.fillWidth: true; elide: Text.ElideRight
+                    RowLayout {
+                        Label {
+                            text: "Last Block:"
+                            font.pixelSize: dataFontSize
+                            font.bold: true
+                            color: "#ddd"
+                            Layout.preferredWidth: 130
+                        }
+                        Label {
+                            text: currentStatus && currentStatus.tip
+                                  ? (currentStatus.tip.lastBlockPushed || currentStatus.tip.last_block_pushed || "")
+                                  : ""
+                            font.pixelSize: dataFontSize
+                            color: "white"
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                            elide: Text.ElideRight
+                        }
                     }
-                }
-                RowLayout {
-                    Label { text: "Total Difficulty:"; font.bold: true; color: "#ddd"; Layout.preferredWidth: 130 }
-                    Label {
-                        text: currentStatus && currentStatus.tip
-                              ? String(currentStatus.tip.totalDifficulty || currentStatus.tip.total_difficulty || "")
-                              : ""
-                        color: "white"; Layout.fillWidth: true
+                    RowLayout {
+                        Label {
+                            text: "Prev Block:"
+                            font.pixelSize: dataFontSize
+                            font.bold: true
+                            color: "#ddd"
+                            Layout.preferredWidth: 130
+                        }
+                        Label {
+                            text: currentStatus && currentStatus.tip
+                                  ? (currentStatus.tip.prevBlockToLast || currentStatus.tip.prev_block_to_last || "")
+                                  : ""
+                            font.pixelSize: dataFontSize
+                            color: "white"
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                            elide: Text.ElideRight
+                        }
+                    }
+                    RowLayout {
+                        Label {
+                            text: "Total Difficulty:"
+                            font.pixelSize: dataFontSize
+                            font.bold: true
+                            color: "#ddd"
+                            Layout.preferredWidth: 130
+                        }
+                        Label {
+                            text: currentStatus && currentStatus.tip
+                                  ? String(currentStatus.tip.totalDifficulty || currentStatus.tip.total_difficulty || "")
+                                  : ""
+                            font.pixelSize: dataFontSize
+                            color: "white"
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                        }
                     }
                 }
             }
         }
-    }
 
     // Verbindung zum C++-Signal
     Connections {
@@ -504,4 +676,5 @@ Rectangle {
             root.lastUpdated = h + ":" + m + ":" + s
         }
     }
+  }
 }

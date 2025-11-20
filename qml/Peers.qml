@@ -18,6 +18,7 @@ Item {
     property string errorText: ""
     property var uaOptions: ["All"]      // gets rebuilt dynamically from peers
     property bool compactLayout: false
+    property string peersStatusText: "Loading peers..."
 
     // Sizes
     readonly property int kCardH: 72
@@ -81,6 +82,14 @@ Item {
         return ""
     }
 
+    function updatePeerArray(list) {
+        var arr = Array.isArray(list) ? list : []
+        peers.splice(0, peers.length)
+        for (var i = 0; i < arr.length; ++i) {
+            peers.push(arr[i])
+        }
+    }
+
     // ---------------------------------------------------
     // UA options (dropdown) builder
     // ---------------------------------------------------
@@ -142,6 +151,19 @@ Item {
         filteredPeers = out
     }
 
+    function updatePeersStatusText() {
+        if (errorText.length) {
+            peersStatusText = errorText
+        } else if (loading) {
+            peersStatusText = "Loading peers..."
+        } else {
+            peersStatusText = filteredPeers.length + " / " + peers.length + " peers"
+        }
+    }
+
+    onLoadingChanged: updatePeersStatusText()
+    onErrorTextChanged: updatePeersStatusText()
+    onFilteredPeersChanged: updatePeersStatusText()
     // ---------------------------------------------------
     // Dark button component
     // ---------------------------------------------------
@@ -197,17 +219,6 @@ Item {
                 Layout.fillWidth: true
             }
 
-            Loader {
-                id: refreshBtn
-                Layout.fillWidth: compactLayout
-                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
-                sourceComponent: darkButton
-                onLoaded: {
-                    item.text = loading ? "Loading..." : "Refresh"
-                    item.enabled = !loading && nodeRunning
-                    item.onClicked.connect(refresh)
-                }
-            }
         }
         // Status line
         GridLayout {
@@ -225,104 +236,92 @@ Item {
             }
 
             Label {
-                text: !nodeRunning ? "Node is not running - no peers." : (errorText.length ? errorText : (loading ? "Loading peers..." : (filteredPeers.length + " / " + peers.length + " peers")))
-                color: !nodeRunning ? "#ffcc66" : (errorText.length ? "#ff8080" : "#aaa")
+                text: peersStatusText
+                color: errorText.length ? "#ff8080" : "#aaa"
                 font.pixelSize: 13
                 Layout.fillWidth: true
             }
 
-            Switch {
-                id: autoRefresh
-                text: "Auto"
-                checked: false
-                enabled: nodeRunning
-                Layout.alignment: compactLayout ? Qt.AlignLeft : Qt.AlignRight
-            }
         }
 
         // Filters row
-        Flow {
-            id: filterFlow
-            width: parent.width
-            spacing: compactLayout ? 10 : 16
-            enabled: nodeRunning
-            opacity: nodeRunning ? 1.0 : 0.5
+        GridLayout {
+            id: filterGrid
+            Layout.fillWidth: true
+            columns: compactLayout ? 1 : 4
+            columnSpacing: compactLayout ? 8 : 16
+            rowSpacing: compactLayout ? 8 : 12
 
-            Column {
-                width: compactLayout ? filterFlow.width : 180
+            ColumnLayout {
+                Layout.fillWidth: true
                 spacing: 4
                 Label { text: "State"; color: "#bbb"; font.pixelSize: 12 }
                 ComboBox {
                     id: stateFilter
                     model: ["All","Healthy","Banned","Defunct"]
-                    width: parent.width
+                    Layout.fillWidth: true
                     onCurrentIndexChanged: applyFilter()
                 }
             }
 
-            Column {
-                width: compactLayout ? filterFlow.width : 180
+            ColumnLayout {
+                Layout.fillWidth: true
                 spacing: 4
-                Label { text: "Ban"; color: "#bbb"; font.pixelSize: 12 }
+                Label { text: "Banned"; color: "#bbb"; font.pixelSize: 12 }
                 ComboBox {
                     id: banFilter
                     model: ["All","Banned","Unbanned"]
-                    width: parent.width
+                    Layout.fillWidth: true
                     onCurrentIndexChanged: applyFilter()
                 }
             }
 
-            Column {
-                width: compactLayout ? filterFlow.width : 220
+            ColumnLayout {
+                Layout.fillWidth: true
                 spacing: 4
-                Label { text: "User-Agent"; color: "#bbb"; font.pixelSize: 12 }
-                ComboBox {
-                    id: uaFilter
-                    model: uaOptions
-                    width: parent.width
-                    onCurrentIndexChanged: applyFilter()
+
+                Label {
+                    text: "User Agent"
+                    color: "#bbb"
+                    font.pixelSize: 12
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+
+                    ComboBox {
+                        id: uaFilter
+                        model: uaOptions
+                        Layout.fillWidth: true
+                        onCurrentIndexChanged: applyFilter()
+                    }
+
+                    CheckBox {
+                        id: uaMustExist
+                        text: ""
+                        checked: false
+                        onCheckedChanged: applyFilter()
+                        ToolTip {
+                            text: "Only show peers with a user agent"
+                        }
+                    }
                 }
             }
 
-            Item {
-                width: compactLayout ? filterFlow.width : 200
-                implicitHeight: uaMustExist.implicitHeight
-                CheckBox {
-                    id: uaMustExist
-                    text: "Only with User-Agent"
-                    anchors.left: parent.left
-                    width: parent.width
-                    onToggled: applyFilter()
-                }
-            }
-
-            Column {
-                width: compactLayout ? filterFlow.width : 260
+            ColumnLayout {
+                Layout.fillWidth: true
                 spacing: 4
                 Label { text: "Search"; color: "#bbb"; font.pixelSize: 12 }
                 TextField {
                     id: searchField
-                    placeholderText: "Search address or User-Agent..."
-                    width: parent.width
+                    placeholderText: "Search peers..."
+                    Layout.fillWidth: true
                     onTextChanged: applyFilter()
                 }
             }
-
-            Loader {
-                width: compactLayout ? filterFlow.width : 120
-                sourceComponent: darkButton
-                onLoaded: {
-                    item.text = "Clear"
-                    item.onClicked.connect(function() {
-                        stateFilter.currentIndex = 0
-                        banFilter.currentIndex = 0
-                        uaFilter.currentIndex = 0
-                        uaMustExist.checked = false
-                        searchField.text = ""
-                    })
-                }
-            }
         }
+
         // List
         ListView {
             id: list
@@ -333,20 +332,6 @@ Item {
             interactive: nodeRunning
             clip: true
             ScrollBar.vertical: ScrollBar { }
-
-            // Non-running overlay
-            Rectangle {
-                anchors.fill: parent
-                visible: !nodeRunning
-                color: "transparent"
-                z: 10
-                Column {
-                    anchors.centerIn: parent
-                    spacing: 10
-                    Label { text: "Node is not running."; color: "#bbb"; font.pixelSize: 16 }
-                    Label { text: "Start Rust or Grin++ from the Home view."; color: "#777"; font.pixelSize: 12 }
-                }
-            }
 
             delegate: Rectangle {
                 width: list.width
@@ -402,40 +387,38 @@ Item {
                         }
                     }
 
-                    Loader {
-                        id: actionBtn
-                        Layout.alignment: compactLayout ? (Qt.AlignLeft | Qt.AlignVCenter) : (Qt.AlignRight | Qt.AlignVCenter)
-                        Layout.fillWidth: compactLayout
-                        Layout.preferredWidth: root.kBtnW
-                        Layout.minimumWidth: compactLayout ? 0 : root.kBtnW
-                        Layout.maximumWidth: compactLayout ? filterFlow.width : root.kBtnW
-                        sourceComponent: darkButton
-                        onLoaded: {
-                            var banned = isBanned(parseFlags(modelData.flags))
-                            var addrStr = addrFromPeer(modelData)
-                            item.text = banned ? "Unban" : "Ban"
-                            item.enabled = nodeRunning && !loading && addrStr.length
-                            item.onClicked.connect(function() {
-                                if (!nodeRunning) return
-                                item.enabled = false
-                                if (banned) nodeOwnerApi.unbanPeerAsync(addrStr)
-                                else nodeOwnerApi.banPeerAsync(addrStr)
-                            })
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 4
+                        Label {
+                            text: "Difficulty: " + (modelData.totalDifficulty || modelData.difficulty || "")
+                            color: "#aaa"
+                            font.pixelSize: 12
+                        }
+                        Label {
+                            text: "Dir: " + (modelData.direction || "")
+                            color: "#aaa"
+                            font.pixelSize: 12
                         }
                     }
                 }
             }
-            // Footer (empty state for active filters)
             footer: Item {
-                width: 1
-                height: (filteredPeers.length === 0 && nodeRunning && !loading) ? 64 : 0
+                width: list.width
+                height: (filteredPeers.length === 0 && nodeRunning && !loading) ? 64 : 40
+
                 Column {
                     anchors.centerIn: parent
                     spacing: 6
+
                     Label {
                         text: peers.length > 0 ? "No peers match the current filters." : "No peers found."
                         color: "#777"
+                        horizontalAlignment: Text.AlignHCenter
+                        width: list.width   // damit der Text sauber umbrechen kann
+                        wrapMode: Text.Wrap
                     }
+
                     Loader {
                         visible: peers.length > 0
                         sourceComponent: darkButton
@@ -452,10 +435,11 @@ Item {
                     }
                 }
             }
+
         }
+
     }
 
-    // ---------------------------------------------------
     // Backend connections
     // ---------------------------------------------------
     Connections {
@@ -464,13 +448,9 @@ Item {
         function onGetPeersFinishedQml(list) {
             loading = false
             errorText = ""
-            peers = Array.isArray(list) ? list : []
+            updatePeerArray(list)
             rebuildUaOptions()
             applyFilter()
-            if (refreshBtn.item) {
-                refreshBtn.item.text = "â†» Refresh"
-                refreshBtn.item.enabled = nodeRunning
-            }
         }
 
         function onBanPeerFinished(result) {
@@ -495,14 +475,10 @@ Item {
         if (!nodeRunning) return
         loading = true
         errorText = ""
-        if (refreshBtn.item) {
-            refreshBtn.item.text = "â€¦ Loading"
-            refreshBtn.item.enabled = false
-        }
         nodeOwnerApi.getPeersAsync("")
     }
 
-    onPeersChanged: { rebuildUaOptions(); applyFilter() }
+    onPeersChanged: { updatePeersStatusText(); rebuildUaOptions(); applyFilter() }
 
     onNodeRunningChanged: {
         if (nodeRunning) {
@@ -512,21 +488,18 @@ Item {
         } else {
             loading = false
             errorText = ""
-            if (refreshBtn.item) {
-                refreshBtn.item.text = "â†» Refresh"
-                refreshBtn.item.enabled = false
-            }
         }
     }
 
     Timer {
         interval: 10000
         repeat: true
-        running: autoRefresh.checked && nodeRunning
+        running: nodeRunning
         onTriggered: refresh()
     }
 
     Component.onCompleted: {
+        updatePeersStatusText()
         stateFilter.currentIndex = 0
         banFilter.currentIndex = 0
         uaFilter.currentIndex = 0

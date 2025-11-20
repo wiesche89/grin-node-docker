@@ -13,84 +13,96 @@ Rectangle {
 
     property var peersModel: []
     property string lastUpdated: ""
+    property int headingFontSize: 20
+    property int bodyFontSize: 16
 
-    ColumnLayout {
-        id: contentLayout
+    ScrollView {
+        id: tableScroll
         anchors.fill: parent
-        anchors.margins: 12
-        spacing: 8
+        clip: true
+        Layout.fillWidth: true
+        Layout.fillHeight: true
+        ScrollBar.horizontal.policy: ScrollBar.AsNeeded
+        ScrollBar.vertical.policy: ScrollBar.AsNeeded
 
-        // Header mit Titel und Uhrzeit nebeneinander
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 8
+        ColumnLayout {
+            anchors.top: parent.top
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.margins: 16
+            spacing: 12
 
-            Label {
-                text: "Connected Peers"
-                font.pixelSize: 20
-                font.bold: true
-                color: "#ffffff"
-                Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+            //Header
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+
+                Label {
+                    text: "Connected Peers"
+                    font.pixelSize: headingFontSize
+                    font.bold: true
+                    color: "#ffffff"
+                    Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                }
+
+                Item { Layout.fillWidth: true }
+
+                Label {
+                    text: lastUpdated !== "" ? "Last Update: " + lastUpdated : ""
+                    font.pixelSize: bodyFontSize
+                    color: "#aaaaaa"
+                    Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                }
             }
 
-            Item { Layout.fillWidth: true } // Platzhalter
-
-            Label {
-                text: lastUpdated !== "" ? "Last Update: " + lastUpdated : ""
-                font.pixelSize: 14
-                color: "#aaaaaa"
-                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
-            }
-        }
-        // Header row
-        Rectangle {
-            Layout.fillWidth: true
-            height: 30
-            color: "#444"
-            radius: 4
-            Row {
-                anchors.fill: parent
-                anchors.margins: 8
-                spacing: 16
-
-                Label { text: "UserAgent"; color: "white"; font.bold: true; width: 160 }
-                Label { text: "Height"; color: "white"; font.bold: true; width: 90; horizontalAlignment: Text.AlignHCenter }
-                Label { text: "Addr"; color: "white"; font.bold: true; width: 180 }
-                Label { text: "Version"; color: "white"; font.bold: true; width: 80; horizontalAlignment: Text.AlignHCenter }
-                Label { text: "Dir"; color: "white"; font.bold: true; width: 90; horizontalAlignment: Text.AlignHCenter }
-                Label { text: "Capabilities"; color: "white"; font.bold: true; width: 130 }
-                Label { text: "Difficulty"; color: "white"; font.bold: true; width: 160 }
-            }
-        }
-
-        ListView {
-            id: peerList
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            Layout.minimumHeight: 180
-            Layout.preferredHeight: Math.max(220, Math.min(460, contentHeight + 40))
-            Layout.maximumHeight: 520
-            clip: true
-            spacing: 2
-            model: root.peersModel
-
-            delegate: Rectangle {
-                width: peerList.width
-                height: 28
-                color: index % 2 === 0 ? "#3a3a3a" : "#333333"
-
+            Rectangle {
+                width: parent ? parent.width : 930
+                height: 30
+                color: "#444"
+                radius: 4
                 Row {
                     anchors.fill: parent
                     anchors.margins: 8
                     spacing: 16
 
-                    Label { text: modelData.userAgent; color: "#ffffff"; width: 160; elide: Text.ElideRight }
-                    Label { text: modelData.height; color: "#cccccc"; width: 90; horizontalAlignment: Text.AlignHCenter }
-                    Label { text: modelData.addr.asString; color: "#cccccc"; width: 180; elide: Text.ElideRight }
-                    Label { text: modelData.version.asString; color: "#cccccc"; width: 80; horizontalAlignment: Text.AlignHCenter }
-                    Label { text: modelData.direction.asString; color: "#cccccc"; width: 90; horizontalAlignment: Text.AlignHCenter }
-                    Label { text: modelData.capabilities.asString; color: "#cccccc"; width: 130; elide: Text.ElideRight }
-                    Label { text: modelData.totalDifficulty.asString; color: "#cccccc"; width: 160; elide: Text.ElideRight }
+                Label { text: "UserAgent"; color: "white"; font.bold: true; font.pixelSize: 16; width: 160 }
+                Label { text: "Height"; color: "white"; font.bold: true; font.pixelSize: 16; width: 90; horizontalAlignment: Text.AlignHCenter }
+                Label { text: "Addr"; color: "white"; font.bold: true; font.pixelSize: 16; width: 180 }
+                Label { text: "Version"; color: "white"; font.bold: true; font.pixelSize: 16; width: 80; horizontalAlignment: Text.AlignHCenter }
+                Label { text: "Dir"; color: "white"; font.bold: true; font.pixelSize: 16; width: 90; horizontalAlignment: Text.AlignHCenter }
+                Label { text: "Capabilities"; color: "white"; font.bold: true; font.pixelSize: 16; width: 130 }
+                Label { text: "Difficulty"; color: "white"; font.bold: true; font.pixelSize: 16; width: 160 }
+                }
+            }
+
+            ListView {
+                id: peerList
+                width: parent ? parent.width : 930
+                height: 400
+                clip: true
+                spacing: 2
+                model: root.peersModel
+                Layout.fillWidth: true
+                Layout.preferredHeight: 360
+
+                delegate: Rectangle {
+                    width: peerList.width
+                    height: 28
+                    color: index % 2 === 0 ? "#3a3a3a" : "#333333"
+
+                    Row {
+                        anchors.fill: parent
+                        anchors.margins: 8
+                        spacing: 16
+
+                    Label { text: modelData.userAgent; color: "#ffffff"; width: 160; elide: Text.ElideRight; font.pixelSize: 16 }
+                    Label { text: modelData.height; color: "#cccccc"; width: 90; horizontalAlignment: Text.AlignHCenter; font.pixelSize: 16 }
+                    Label { text: modelData.addr.asString; color: "#cccccc"; width: 180; elide: Text.ElideRight; font.pixelSize: 16 }
+                    Label { text: modelData.version.asString; color: "#cccccc"; width: 80; horizontalAlignment: Text.AlignHCenter; font.pixelSize: 16 }
+                    Label { text: modelData.direction.asString; color: "#cccccc"; width: 90; horizontalAlignment: Text.AlignHCenter; font.pixelSize: 16 }
+                    Label { text: modelData.capabilities.asString; color: "#cccccc"; width: 130; elide: Text.ElideRight; font.pixelSize: 16 }
+                    Label { text: modelData.totalDifficulty.asString; color: "#cccccc"; width: 160; elide: Text.ElideRight; font.pixelSize: 16 }
+                    }
                 }
             }
         }

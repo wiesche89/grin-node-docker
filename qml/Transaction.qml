@@ -9,30 +9,29 @@ Item {
     property bool nodeRunning: false
     property bool compactLayout: false
 
-    // In main.cpp gesetzt: engine.rootContext()->setContextProperty("nodeForeignApi", api);
     readonly property var foreignApi: nodeForeignApi
-    property int refreshIntervalMs: 8000
+    property int mempoolPollIntervalMs: 8000
 
     // ---- UI-State
     property int poolSize: 0
     property int stempoolSize: 0
     property var tip: ({ height: 0, lastBlockPushed: "", prevBlockToLast: "", totalDifficulty: 0 })
-    property var entries: []   // nur Pool-Transaktionen
+    property var entries: []   // only pool transactions
 
-    // ---------- Helper: robustes Tip-Mapping aus beliebiger Payload ----------
+    // ---------- Helper: robust tip mapping from arbitrary payload ----------
     function toTip(obj) {
-        // akzeptiere Q_GADGET (QML-Value), QVariantMap, JS-Objekt
+        // accept Q_GADGET (QML value), QVariantMap, JS object
         if (!obj) return { height: 0, lastBlockPushed: "", prevBlockToLast: "", totalDifficulty: 0 }
 
-        // Direkter Zugriff
+        // direct access
         var h = obj.height
         var lb = obj.lastBlockPushed || obj.last_block_pushed || obj.last_block_h
         var pv = obj.prevBlockToLast || obj.prev_block_to_last || obj.prev_block_h
         var td = obj.totalDifficulty || obj.total_difficulty
 
-        // Falls Q_GADGET-Felder nicht als Properties sichtbar wÃ¤ren, versuche stringifier
-        // (u. U. liefert dein C++-Side schon ein QJsonObject -> dann oben ok)
-        // Noch defensiver: Keys-case-insensitive prÃ¼fen
+                // If Q_GADGET fields are not exposed as properties, fall back to the stringifier
+        // (in some cases your C++ side already provides a QJsonObject, so this is fine)
+        // Even more defensive: check keys case-insensitively
         function pick(o, keys) {
             for (var i=0;i<keys.length;i++) {
                 var k = keys[i]
@@ -77,41 +76,31 @@ Item {
         return out
     }
 
-    // ---------------- API: Aufrufe ----------------
-    function refreshAll() {
-        if (!foreignApi) { status.showError("Foreign API nicht gesetzt."); return }
-        try {
-            foreignApi.getTipAsync()
-            foreignApi.getPoolSizeAsync()
-            foreignApi.getStempoolSizeAsync()
-            foreignApi.getUnconfirmedTransactionsAsync()
-            // kein Status.show hier, sonst spammt's beim Auto-Polling
-        } catch (e) {
-            status.showError("API-Fehler: " + e)
-        }
+    // ---------------- API: Calls ----------------
+    function startMempoolPolling() {
+        if (!foreignApi) return
+        foreignApi.startMempoolPolling(mempoolPollIntervalMs)
     }
 
-    // Auto-Polling
-    Timer {
-        id: pollTimer
-        interval: refreshIntervalMs
-        repeat: true
-        running: nodeRunning && !!foreignApi
-        onTriggered: if (nodeRunning) refreshAll()
+    function stopMempoolPolling() {
+        if (!foreignApi) return
+        foreignApi.stopMempoolPolling()
     }
 
-    Component.onCompleted: if (nodeRunning) refreshAll()
-    onForeignApiChanged: {
-        pollTimer.running = nodeRunning && !!foreignApi
-        if (foreignApi && nodeRunning) refreshAll()
+    function updatePollingState() {
+        if (!foreignApi) return
+        if (nodeRunning)
+            startMempoolPolling()
+        else
+            stopMempoolPolling()
     }
 
-    onNodeRunningChanged: {
-        pollTimer.running = nodeRunning && !!foreignApi
-        if (nodeRunning && foreignApi) refreshAll()
-    }
+    Component.onCompleted: updatePollingState()
+    onForeignApiChanged: updatePollingState()
+    onNodeRunningChanged: updatePollingState()
+    Component.onDestruction: stopMempoolPolling()
 
-    // ---------------- Signale der Foreign API ----------------
+    // ---------------- Foreign API Signals ----------------
     Connections {
         target: (typeof foreignApi === "object" && foreignApi) ? foreignApi : null
         ignoreUnknownSignals: true
@@ -119,10 +108,10 @@ Item {
         function onPoolSizeUpdated(size) { poolSize = Number(size || 0) }
         function onStempoolSizeUpdated(size) { stempoolSize = Number(size || 0) }
 
-        // Robust: egal ob Tip als Gadget/Map kommt
+        // Robust: regardless of how the tip arrives (gadget, map, etc.)
         function onTipUpdated(payload) {
-            // Debug-Ausgabe einmal aktiv lassen â€“ hilft sofort beim Verifizieren
-            // (kannst du spÃ¤ter entfernen)
+            // Keep the debug output active for now; it helps verify behavior
+            // (you can remove it later)
             // console.debug("[Transaction.qml] tipUpdated payload =", payload)
             tip = toTip(payload)
         }
@@ -165,13 +154,16 @@ Item {
     // ---------------------------------------------
     ColumnLayout {
         anchors.fill: parent
+        Layout.fillWidth: true
+        Layout.fillHeight: true
+        Layout.alignment: Qt.AlignTop
         property bool nodeRunning: false
         anchors.margins: compactLayout ? 12 : 20
         spacing: 16
 
         GridLayout {
             Layout.fillWidth: true
-            columns: compactLayout ? 1 : 3
+            columns: 1
             columnSpacing: 12
             rowSpacing: 6
 
@@ -182,26 +174,9 @@ Item {
                 font.bold: true
                 Layout.fillWidth: true
             }
-
-            Item { Layout.fillWidth: true }
-
-            Loader {
-                id: refreshBtn
-                Layout.alignment: compactLayout ? (Qt.AlignLeft | Qt.AlignVCenter) : (Qt.AlignRight | Qt.AlignVCenter)
-                Layout.fillWidth: compactLayout
-                sourceComponent: darkButtonComponent
-                onLoaded: {
-                    if (!refreshBtn.item) return
-                    refreshBtn.item.text = "Refresh"
-                    refreshBtn.item.clicked.connect(function() {
-                        status.show("Aktualisiere ...")
-                        refreshAll()
-                    })
-                }
-            }
         }
 
-        // TIP-KARTE
+        // TIP CARD
         TipCard {
             Layout.fillWidth: true
             tipHeight: tip.height
@@ -211,30 +186,25 @@ Item {
             compactLayout: root.compactLayout
         }
 
-        // Infochips Pool/Stempool
+        // Info chips for Pool and Stempool
         Flow {
+            Layout.fillWidth: true
             width: parent.width
             spacing: compactLayout ? 8 : 12
             InfoChip { label: "Pool"; value: poolSize }
             InfoChip { label: "Stempool"; value: stempoolSize }
         }
-        // Hinweis
-        Label {
-            Layout.fillWidth: true
-            text: "Hinweis: Stempool-Transaktionen werden aus Privacy-GrÃ¼nden nicht gelistet; unten siehst du nur den (geflufften) Pool."
-            color: "#888"
-            font.pixelSize: 12
-        }
 
-        // Legende
+        // Legend
         Flow {
+            Layout.fillWidth: true
             width: parent.width
             spacing: compactLayout ? 6 : 10
-            LegendChip { label: "Fee hoch" }
-            LegendChip { label: "Fee niedrig"; invert: true }
+            LegendChip { label: "High Fee" }
+            LegendChip { label: "Low Fee"; invert: true }
             LegendChip { label: "Pool"; colorMode: "src-pool" }
         }
-        // Inhalt (Pool-Transaktionen)
+        // Content (pool transactions)
         Frame {
             Layout.fillWidth: true
             Layout.fillHeight: true
@@ -279,7 +249,7 @@ Item {
         StatusBar { id: status; Layout.fillWidth: true }
     }
 
-    // ---------- Komponenten ----------
+    // ---------- Components ----------
 
     component TipCard: Rectangle {
         id: tipCard
@@ -288,21 +258,26 @@ Item {
         property string prevBlockToLast: ""
         property var totalDifficulty: 0
         property bool compactLayout: false
+        property int layoutBreakpoint: 520
+        readonly property bool stackedLayout: compactLayout || width < layoutBreakpoint
+        property int contentSpacing: compactLayout ? 10 : 16
 
         radius: 12
         color: "#141414"
         border.color: "#2a2a2a"
         border.width: 1
-        height: compactLayout ? 140 : 96
 
         Flow {
             id: tipFlow
             anchors.fill: parent
             anchors.margins: 14
-            spacing: compactLayout ? 12 : 18
+            Layout.fillWidth: true
+            spacing: contentSpacing
+            flow: Flow.LeftToRight
 
-            Column {
-                width: compactLayout ? tipFlow.width : 140
+            ColumnLayout {
+                width: columnWidth
+                Layout.fillHeight: true
                 spacing: 2
                 Label { text: "Tip Height"; color: "#bbbbbb"; font.pixelSize: 12 }
                 Label {
@@ -311,17 +286,10 @@ Item {
                 }
             }
 
-            Rectangle {
-                width: compactLayout ? 0 : 1
-                height: parent.height * 0.7
-                visible: !compactLayout
-                color: "#2d2d2d"
-            }
-
-            Column {
-                width: compactLayout ? tipFlow.width : 260
+            ColumnLayout {
+                width: columnWidth
+                Layout.fillHeight: true
                 spacing: 6
-
                 RowLayout {
                     spacing: 8
                     Label { text: "Last:"; color: "#bbbbbb"; font.pixelSize: 12 }
@@ -333,7 +301,6 @@ Item {
                         elide: Text.ElideRight; Layout.fillWidth: true
                     }
                 }
-
                 RowLayout {
                     spacing: 8
                     Label { text: "Prev:"; color: "#bbbbbb"; font.pixelSize: 12 }
@@ -347,23 +314,27 @@ Item {
                 }
             }
 
-            Rectangle {
-                width: compactLayout ? 0 : 1
-                height: parent.height * 0.7
-                visible: !compactLayout
-                color: "#2d2d2d"
-            }
-
-            Column {
-                width: compactLayout ? tipFlow.width : 150
+            ColumnLayout {
+                width: columnWidth
+                Layout.fillHeight: true
                 spacing: 2
-                Label { text: "Total Difficulty"; color: "#bbbbbb"; font.pixelSize: 12 }
+                Label { text: "Total Difficulty:"; color: "#bbbbbb"; font.pixelSize: 12 }
                 Label {
                     text: Number(tipCard.totalDifficulty || 0).toLocaleString(Qt.locale(), 'f', 0)
                     color: "#ffd46a"; font.pixelSize: 18; font.bold: true
                 }
+                Item {
+                    Layout.fillWidth: true
+                    height: stackedLayout ? 14 : 8
+                }
             }
         }
+
+        property real columnWidth: stackedLayout
+            ? Math.max(0, width - 28)
+            : Math.max(140, (width - 2 * contentSpacing - 28) / 3)
+        implicitHeight: tipFlow.implicitHeight + 8
+        height: implicitHeight
     }
 
     component InfoChip: Rectangle {
