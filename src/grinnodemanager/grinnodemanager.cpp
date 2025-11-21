@@ -233,6 +233,7 @@ void GrinNodeManager::onReplyFinished(QNetworkReply *reply)
     const QString path = url.path();
     const QByteArray payload = reply->readAll();
 
+    qDebug() << "[GrinNodeManager] Network: " << statusCode << "    " << path << "    " << payload;
     auto finish = [&] {
                       const QString pretty = safePretty(payload);
                       if (pretty != m_lastResponse) {

@@ -2,6 +2,7 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import QtQuick.Window 2.15
+import Qt.labs.settings 1.1 as QtSettings
 
 ApplicationWindow {
     id: root
@@ -16,7 +17,7 @@ ApplicationWindow {
     color: "#1e1e1e"
 
     property bool compactLayout: width < 900
-    property var pageTitles: ["Home", "Map", "Peers", "Transaction", "Chain"]
+    property var pageTitles: ["Home", "Map", "Peers", "Transaction", "Chain", "Settings"]
     onCompactLayoutChanged: if (!compactLayout && sidebarDrawer.opened) sidebarDrawer.close()
 
     ListModel {
@@ -26,6 +27,13 @@ ApplicationWindow {
         ListElement { title: "Peers"; index: 2 }
         ListElement { title: "Transaction"; index: 3 }
         ListElement { title: "Chain"; index: 4 }
+        ListElement { title: "Settings"; index: 5 }
+    }
+
+    QtSettings.Settings {
+        id: appSettings
+        fileName: "grin-node-settings.ini"
+        property string controllerUrlOverride: ""
     }
 
     header: ToolBar {
@@ -146,6 +154,7 @@ ApplicationWindow {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     compactLayout: root.compactLayout
+                    settingsStore: appSettings
                 }
                 Map {
                     Layout.fillWidth: true
@@ -169,6 +178,12 @@ ApplicationWindow {
                     Layout.fillHeight: true
                     nodeRunning: homePage.nodeRunning
                     compactLayout: root.compactLayout
+                }
+                Settings {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    compactLayout: root.compactLayout
+                    settingsStore: appSettings
                 }
             }
         }

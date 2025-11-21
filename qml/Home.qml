@@ -8,15 +8,20 @@ Item {
     Layout.fillWidth: true
     Layout.fillHeight: true
     property bool compactLayout: false
+    property var settingsStore: null
     property int headingFontSize: 20
     property int bodyFontSize: 16
 
-    // Basis-URL fÃ¼r den Controller:
+    // Basis-URL für den Controller:
     // - im WASM-Build: /api/  (wird von Nginx zum Controller proxied)
     property url controllerApiUrl: {
         var base = ""
 
-        if (typeof controllerBaseUrl !== "undefined" && controllerBaseUrl !== null) {
+        if (settingsStore && settingsStore.controllerUrlOverride && settingsStore.controllerUrlOverride.length > 0) {
+            base = settingsStore.controllerUrlOverride
+        }
+
+        if (base === "" && typeof controllerBaseUrl !== "undefined" && controllerBaseUrl !== null) {
             base = controllerBaseUrl.toString()
         }
 
@@ -46,18 +51,89 @@ Item {
     function isRustRunning()   { return nodeState === "rust"; }
     function isGrinppRunning() { return nodeState === "grinpp"; }
     function isStarting()      { return nodeState === "rustStarting" || nodeState === "grinppStarting"; }
+
+    function toPlainObject(obj) {
+        if (!obj || typeof obj !== "object")
+            return obj
+        try {
+            return JSON.parse(JSON.stringify(obj))
+        } catch (e) {
+            return obj
+        }
+    }
+
+    function startStatusAndPeersPolling() {
+        if (typeof nodeOwnerApi !== "undefined" && nodeOwnerApi) {
+            nodeOwnerApi.startStatusPolling && nodeOwnerApi.startStatusPolling(10000)
+            nodeOwnerApi.startConnectedPeersPolling && nodeOwnerApi.startConnectedPeersPolling(5000)
+        } else {
+            mgr.startStatusPolling(10000)
+        }
+    }
+
+    function stopStatusAndPeersPolling() {
+        if (typeof nodeOwnerApi !== "undefined" && nodeOwnerApi) {
+            if (typeof nodeOwnerApi.stopStatusPolling === "function")
+                nodeOwnerApi.stopStatusPolling()
+            if (typeof nodeOwnerApi.stopConnectedPeersPolling === "function")
+                nodeOwnerApi.stopConnectedPeersPolling()
+        } else {
+            mgr.stopStatusPolling()
+        }
+    }
+
     function applyControllerStatus(statusObj) {
-        if (!statusObj || !statusObj.nodes)
+        var normalized = toPlainObject(statusObj)
+        if (!normalized)
             return
 
-        var nodes = statusObj.nodes
-        if (nodes.rust && nodes.rust.running) {
-            homeRoot.nodeState = "rust"
-        } else if (nodes.grinpp && nodes.grinpp.running) {
-            homeRoot.nodeState = "grinpp"
-        } else if (homeRoot.nodeState !== "none") {
-            homeRoot.nodeState = "none"
+        var nodes = null
+        if (normalized.nodes) {
+            nodes = normalized.nodes
+        } else if (normalized["nodes"]) {
+            nodes = normalized["nodes"]
+        } else if (normalized.id) {
+            nodes = {}
+            nodes[normalized.id] = normalized
+        } else if (normalized.rust || normalized.grinpp) {
+            nodes = normalized
         }
+        if (!nodes)
+            return
+
+        var normalizeRunningFlag = function(flag) {
+            if (typeof flag === "boolean")
+                return flag
+            if (typeof flag === "number")
+                return flag !== 0
+            if (typeof flag === "string")
+                return flag.toLowerCase() === "true" || flag === "1"
+            return false
+        }
+
+        var rustInfo = nodes.rust || nodes["rust"]
+        var grinppInfo = nodes.grinpp || nodes["grinpp"]
+        var rustRunning = rustInfo ? normalizeRunningFlag(rustInfo.running) : false
+        var grinppRunning = grinppInfo ? normalizeRunningFlag(grinppInfo.running) : false
+
+        var newState = "none"
+        if (rustRunning) {
+            newState = "rust"
+        } else if (grinppRunning) {
+            newState = "grinpp"
+        }
+
+        var previousState = homeRoot.nodeState
+        if (previousState !== newState) {
+            homeRoot.nodeState = newState
+        }
+
+        var nodeIsRunning = rustRunning || grinppRunning
+        if (nodeIsRunning && !bootTimer.running && previousState !== newState) {
+            // Ensure polling kicks in when we detect an already running node (e.g. initial getStatus)
+            bootTimer.restart()
+        }
+
         controllerError = false
         controllerErrorOverlay.visible = false
     }
@@ -89,12 +165,7 @@ Item {
 
         onNodeStopped: function(kind) {
             homeRoot.nodeState = "none"
-            if (typeof nodeOwnerApi !== "undefined" && nodeOwnerApi) {
-                if (typeof nodeOwnerApi.stopStatusPolling === "function")
-                    nodeOwnerApi.stopStatusPolling()
-                if (typeof nodeOwnerApi.stopConnectedPeersPolling === "function")
-                    nodeOwnerApi.stopConnectedPeersPolling()
-            }
+            stopStatusAndPeersPolling()
         }
 
         onStatusReceived: function(statusObj) {
@@ -116,14 +187,12 @@ Item {
 
             try {
                 var obj = JSON.parse(mgr.lastResponse)
-
                 if (obj && obj.status && typeof obj.status === "object") {
                     applyControllerStatus(obj.status)
-
-                    if (!bootTimer.running) {
-                        console.log("BootTimer gestartet über lastResponse")
-                        bootTimer.restart()
-                    }
+                } else if (obj && obj.nodes && typeof obj.nodes === "object") {
+                    applyControllerStatus(obj)
+                } else if (obj && obj.id) {
+                    applyControllerStatus(obj)
                 }
             } catch (e) {
                 console.log("Failed to parse mgr.lastResponse:", e, mgr.lastResponse)
@@ -136,15 +205,12 @@ Item {
     // ---------------------------------------------
     Timer {
         id: bootTimer
-        interval: 10000
+        interval: 5000
         repeat: false
         onTriggered: {
             isBooting = false
             if (homeRoot.nodeState === "rust" || homeRoot.nodeState === "grinpp") {
-                if (typeof nodeOwnerApi !== "undefined" && nodeOwnerApi) {
-                    nodeOwnerApi.startStatusPolling && nodeOwnerApi.startStatusPolling(10000)
-                    nodeOwnerApi.startConnectedPeersPolling && nodeOwnerApi.startConnectedPeersPolling(5000)
-                }
+                startStatusAndPeersPolling()
             } else {
                 console.log("BootTimer skipped because no node is running")
             }
@@ -184,11 +250,22 @@ Item {
                         font.bold: true
                     }
 
-                    Text {
-                        text: "Manage and monitor both Rust and Grin++ nodes"
-                        color: "#cccccc"
-                        font.pixelSize: bodyFontSize
-                        visible: !homeRoot.compactLayout
+                    RowLayout {
+                        visible: bootTimer.running
+                        spacing: 8
+                        Layout.alignment: Qt.AlignLeft
+
+                        BusyIndicator {
+                            running: bootTimer.running
+                            implicitWidth: 28
+                            implicitHeight: 28
+                        }
+
+                        Text {
+                            text: "Connecting, please wait..."
+                            color: "#cccccc"
+                            font.pixelSize: bodyFontSize
+                        }
                     }
                 }
 

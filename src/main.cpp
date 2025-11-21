@@ -129,7 +129,7 @@ int main(int argc, char *argv[])
 #else
     // Desktop-Default: lokaler Controller
     if (controllerBase.isEmpty()) {
-        controllerBase = QStringLiteral("http://localhost:8080/");
+        controllerBase = QStringLiteral("http://umbrel.local:3416/");
     }
 #endif
 

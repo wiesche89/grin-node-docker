@@ -70,6 +70,14 @@ Item {
         return "(unknown address)"
     }
 
+    function apiAddrFromPeer(p) {
+        if (!p) return ""
+        if (typeof p.addr === "string" && p.addr.length) return p.addr
+        if (typeof p.address === "string" && p.address.length) return p.address
+        if (typeof p.ip === "string" && p.port !== undefined) return p.ip + ":" + p.port
+        return ""
+    }
+
     // robust UA extraction across differently named fields
     function uaFromPeer(p) {
         if (!p) return ""
@@ -390,15 +398,38 @@ Item {
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: 4
-                        Label {
-                            text: "Difficulty: " + (modelData.totalDifficulty || modelData.difficulty || "")
-                            color: "#aaa"
-                            font.pixelSize: 12
-                        }
-                        Label {
-                            text: "Dir: " + (modelData.direction || "")
-                            color: "#aaa"
-                            font.pixelSize: 12
+                        Item { Layout.fillWidth: true; Layout.fillHeight: true }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 8
+                            Layout.alignment: Qt.AlignRight
+
+                            Button {
+                                id: banButton
+                                text: "Ban"
+                                enabled: nodeRunning && typeof nodeOwnerApi !== "undefined" && nodeOwnerApi && apiAddrFromPeer(modelData) !== ""
+                                implicitWidth: root.kBtnW
+                                implicitHeight: root.kBtnH
+                                onClicked: {
+                                    var addr = apiAddrFromPeer(modelData)
+                                    if (addr && nodeOwnerApi)
+                                        nodeOwnerApi.banPeerAsync(addr)
+                                }
+                            }
+
+                            Button {
+                                id: unbanButton
+                                text: "Unban"
+                                enabled: nodeRunning && typeof nodeOwnerApi !== "undefined" && nodeOwnerApi && apiAddrFromPeer(modelData) !== ""
+                                implicitWidth: root.kBtnW
+                                implicitHeight: root.kBtnH
+                                onClicked: {
+                                    var addr = apiAddrFromPeer(modelData)
+                                    if (addr && nodeOwnerApi)
+                                        nodeOwnerApi.unbanPeerAsync(addr)
+                                }
+                            }
                         }
                     }
                 }
