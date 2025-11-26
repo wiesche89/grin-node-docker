@@ -28,6 +28,9 @@ Rectangle {
     property int headingFontSize: 20
     property int dataFontSize: 16
     property bool compactLayout: root.width < 640
+    property string nodeUptimeLabel: ""
+    property int nodeUptimeSeconds: -1
+    property bool hasNodeUptime: nodeUptimeSeconds >= 0 && nodeUptimeLabel !== ""
 
     // ---------- Helper ----------
     function readInfo(key) {
@@ -73,6 +76,28 @@ Rectangle {
         var v = Number(n)
         if (!isFinite(v)) return "0.0"
         return (v / 1000000).toFixed(1)
+    }
+
+    function formatUptime(seconds) {
+        var total = Number(seconds)
+        if (!isFinite(total) || total < 0)
+            return ""
+        total = Math.floor(total)
+        var days = Math.floor(total / 86400)
+        total -= days * 86400
+        var hours = Math.floor(total / 3600)
+        total -= hours * 3600
+        var minutes = Math.floor(total / 60)
+        var secs = total - minutes * 60
+        var parts = []
+        if (days > 0)
+            parts.push(days + "d")
+        if (hours > 0 || parts.length > 0)
+            parts.push(hours + "h")
+        if (minutes > 0 || parts.length > 0)
+            parts.push(minutes + "m")
+        parts.push(secs + "s")
+        return parts.join(" ")
     }
 
     // ---------- Status-Rohwert ----------
@@ -256,6 +281,13 @@ Rectangle {
                 font.pixelSize: headingFontSize
                 font.bold: true
                 color: "#ffffff"
+                Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+            }
+            Label {
+                visible: hasNodeUptime
+                text: hasNodeUptime ? nodeUptimeLabel + " uptime: " + formatUptime(nodeUptimeSeconds) : ""
+                font.pixelSize: dataFontSize
+                color: "#aaaaaa"
                 Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
             }
             Item { Layout.fillWidth: true }

@@ -47,6 +47,11 @@ Item {
     property bool nodeRunning: isRustRunning() || isGrinppRunning()
     property bool controllerError: false
     property string controllerErrorMessage: ""
+    property bool controllerStatusPollingActive: false
+    property bool nodeOwnerStatusPollingActive: false
+    property bool peersPollingActive: false
+    property string nodeUptimeLabel: ""
+    property int nodeUptimeSeconds: -1
 
     function isRustRunning()   { return nodeState === "rust"; }
     function isGrinppRunning() { return nodeState === "grinpp"; }
@@ -62,23 +67,37 @@ Item {
         }
     }
 
+    function ensureControllerStatusPolling() {
+        if (controllerStatusPollingActive)
+            return
+        mgr.startStatusPolling(10000)
+        controllerStatusPollingActive = true
+    }
+
     function startStatusAndPeersPolling() {
+        ensureControllerStatusPolling()
         if (typeof nodeOwnerApi !== "undefined" && nodeOwnerApi) {
-            nodeOwnerApi.startStatusPolling && nodeOwnerApi.startStatusPolling(10000)
-            nodeOwnerApi.startConnectedPeersPolling && nodeOwnerApi.startConnectedPeersPolling(5000)
-        } else {
-            mgr.startStatusPolling(10000)
+            if (!nodeOwnerStatusPollingActive && typeof nodeOwnerApi.startStatusPolling === "function") {
+                nodeOwnerApi.startStatusPolling(10000)
+                nodeOwnerStatusPollingActive = true
+            }
+            if (!peersPollingActive && typeof nodeOwnerApi.startConnectedPeersPolling === "function") {
+                nodeOwnerApi.startConnectedPeersPolling(5000)
+                peersPollingActive = true
+            }
         }
     }
 
     function stopStatusAndPeersPolling() {
         if (typeof nodeOwnerApi !== "undefined" && nodeOwnerApi) {
-            if (typeof nodeOwnerApi.stopStatusPolling === "function")
+            if (nodeOwnerStatusPollingActive && typeof nodeOwnerApi.stopStatusPolling === "function") {
                 nodeOwnerApi.stopStatusPolling()
-            if (typeof nodeOwnerApi.stopConnectedPeersPolling === "function")
+                nodeOwnerStatusPollingActive = false
+            }
+            if (peersPollingActive && typeof nodeOwnerApi.stopConnectedPeersPolling === "function") {
                 nodeOwnerApi.stopConnectedPeersPolling()
-        } else {
-            mgr.stopStatusPolling()
+                peersPollingActive = false
+            }
         }
     }
 
@@ -128,6 +147,22 @@ Item {
             homeRoot.nodeState = newState
         }
 
+        var uptimeLabel = ""
+        var uptimeSeconds = -1
+        if (rustRunning && rustInfo && rustInfo.uptimeSec !== undefined) {
+            uptimeLabel = "Rust Node"
+            uptimeSeconds = Number(rustInfo.uptimeSec)
+        } else if (grinppRunning && grinppInfo && grinppInfo.uptimeSec !== undefined) {
+            uptimeLabel = "Grin++ Node"
+            uptimeSeconds = Number(grinppInfo.uptimeSec)
+        }
+        if (!isFinite(uptimeSeconds) || uptimeSeconds < 0) {
+            uptimeLabel = ""
+            uptimeSeconds = -1
+        }
+        homeRoot.nodeUptimeLabel = uptimeLabel
+        homeRoot.nodeUptimeSeconds = uptimeSeconds
+
         var nodeIsRunning = rustRunning || grinppRunning
         if (nodeIsRunning && !bootTimer.running && previousState !== newState) {
             // Ensure polling kicks in when we detect an already running node (e.g. initial getStatus)
@@ -146,7 +181,10 @@ Item {
         baseUrl: controllerApiUrl
         username: ""
         password: ""
-        Component.onCompleted: mgr.getStatus()
+        Component.onCompleted: {
+            ensureControllerStatusPolling()
+            mgr.getStatus()
+        }
 
         onNodeStarted: function(kind) {
             console.log("QML: nodeStarted signal received, kind=", kind)
@@ -395,6 +433,8 @@ Item {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 360
                         Layout.minimumHeight: 280
+                        nodeUptimeLabel: homeRoot.nodeUptimeLabel
+                        nodeUptimeSeconds: homeRoot.nodeUptimeSeconds
                     }
 
                     PeerListView {
