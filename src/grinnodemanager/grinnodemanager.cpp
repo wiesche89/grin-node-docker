@@ -26,14 +26,14 @@ void GrinNodeManager::initNetwork()
     connect(&m_statusTimer, &QTimer::timeout, this, &GrinNodeManager::getStatus);
 }
 
-// NEU: Default-Ctor für QML
+// Default-Ctor für QML
 GrinNodeManager::GrinNodeManager(QObject *parent) :
     QObject(parent)
 {
     initNetwork();
 }
 
-// Bisheriger Ctor bleibt
+// Ctor mit Base-URL
 GrinNodeManager::GrinNodeManager(const QUrl &baseUrl, const Options &opts, QObject *parent) :
     QObject(parent),
     m_baseUrl(baseUrl),
@@ -83,6 +83,17 @@ void GrinNodeManager::restartGrinPP(const QStringList &args)
 void GrinNodeManager::getLogsGrinPP(int n)
 {
     getLogs(NodeKind::GrinPP, n);
+}
+
+// NEU: Delete-Wrapper für QML
+void GrinNodeManager::deleteRustChain()
+{
+    deleteChain(NodeKind::Rust);
+}
+
+void GrinNodeManager::deleteGrinppChain()
+{
+    deleteChain(NodeKind::GrinPP);
 }
 
 // ---------- Public API ----------
@@ -148,9 +159,19 @@ void GrinNodeManager::getLogs(NodeKind kind, int n)
     qDebug() << Q_FUNC_INFO;
     // Query-String direkt an den relativen Pfad hängen
     QNetworkRequest req = makeRequest(QString("logs/%1?n=%2")
-                                      .arg(kindToPath(kind))
-                                      .arg(n));
+                                          .arg(kindToPath(kind))
+                                          .arg(n));
     m_net->get(req);
+}
+
+// NEU: /delete/<kind>
+void GrinNodeManager::deleteChain(NodeKind kind)
+{
+    qDebug() << Q_FUNC_INFO;
+    QNetworkRequest req = makeRequest("delete/" + kindToPath(kind));
+
+    // analog zu start/stop/restart als POST
+    m_net->post(req, QByteArray());
 }
 
 // ---------- Utils ----------
@@ -177,10 +198,6 @@ QNetworkRequest GrinNodeManager::makeRequest(const QString &path) const
     }
 
     QUrl url = base.resolved(relUrl);
-
-    // Debug zum Überprüfen im Log
-    // qDebug() << "[GrinNodeManager] makeRequest base=" << base
-    // << "rel=" << rel << "->" << url;
 
     QNetworkRequest req(url);
     req.setRawHeader("User-Agent", m_opts.userAgent);
@@ -233,20 +250,18 @@ void GrinNodeManager::onReplyFinished(QNetworkReply *reply)
     const QString path = url.path();
     const QByteArray payload = reply->readAll();
 
-    qDebug() << "[GrinNodeManager] Network: " << statusCode << "    " << path << "    " << payload;
+    qDebug() << "[GrinNodeManager] Network:" << statusCode << path << payload;
     auto finish = [&] {
-                      const QString pretty = safePretty(payload);
-                      if (pretty != m_lastResponse) {
-                          m_lastResponse = pretty;
-                          emit lastResponseChanged();
-                      }
-                  };
+        const QString pretty = safePretty(payload);
+        if (pretty != m_lastResponse) {
+            m_lastResponse = pretty;
+            emit lastResponseChanged();
+        }
+    };
 
     if (statusCode != 200) {
-        qDebug() << "[GrinNodeManager] Network error: " << statusCode << "    " << path << "    " << payload;
-
+        qDebug() << "[GrinNodeManager] Network error:" << statusCode << path << payload;
         emit errorOccurred(QString("[%1] %2").arg(url.toString(), reply->errorString()));
-
         finish();
         reply->deleteLater();
         return;
@@ -259,12 +274,13 @@ void GrinNodeManager::onReplyFinished(QNetworkReply *reply)
     } else if (path.contains("/logs/")) {
         emit logsReceived(QString::fromUtf8(payload));
     } else if (path.contains("/start/")) {
-        qDebug() << "[GrinNodeManager] start reply path=" << path;
         emit nodeStarted(path.contains("rust") ? NodeKind::Rust : NodeKind::GrinPP);
     } else if (path.contains("/stop/")) {
         emit nodeStopped(path.contains("rust") ? NodeKind::Rust : NodeKind::GrinPP);
     } else if (path.contains("/restart/")) {
         emit nodeRestarted(path.contains("rust") ? NodeKind::Rust : NodeKind::GrinPP);
+    } else if (path.contains("/delete/")) {
+        emit chainDeleted(path.contains("rust") ? NodeKind::Rust : NodeKind::GrinPP);
     }
 
     finish();

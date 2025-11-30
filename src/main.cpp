@@ -107,6 +107,13 @@ int main(int argc, char *argv[])
     QQuickStyle::setStyle("Fusion");
     app.setWindowIcon(QIcon(":/res/media/grin-node/logo.png"));
 
+    QCoreApplication::setOrganizationName("wiesche89");
+    QCoreApplication::setOrganizationDomain("grin-node.local");
+    QCoreApplication::setApplicationName("GrinNode");
+
+    qputenv("QML_XHR_ALLOW_FILE_READ", "1");
+
+
     // ------------------------------------------------------------------------------------
     // Meta-Typen & QML-Typen
     // ------------------------------------------------------------------------------------

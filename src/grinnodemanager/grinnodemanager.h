@@ -33,20 +33,21 @@ public:
         QString password;
         int timeoutMs;
         QByteArray userAgent;
-        Options() : timeoutMs(15000),
+        Options()
+            : timeoutMs(15000),
             userAgent("GrinNodeManager/1.0")
         {
         }
     };
 
-    // <<< NEU: parameterloser Ctor für QML >>>
+    // parameterloser Ctor für QML
     explicit GrinNodeManager(QObject *parent = nullptr);
 
     // vorhandener Ctor bleibt
     explicit GrinNodeManager(const QUrl &baseUrl, const Options &opts = Options(), QObject *parent = nullptr);
     ~GrinNodeManager() override;
 
-    // QML API (unverändert) ...
+    // QML API
     Q_INVOKABLE void getStatus();
 
     Q_INVOKABLE void startRust(const QStringList &args = {});
@@ -59,65 +60,31 @@ public:
     Q_INVOKABLE void restartGrinPP(const QStringList &args = {});
     Q_INVOKABLE void getLogsGrinPP(int n = 100);
 
+    // NEU: Chain-Delete-Endpunkte
+    Q_INVOKABLE void deleteRustChain();
+    Q_INVOKABLE void deleteGrinppChain();
+
     Q_INVOKABLE void startStatusPolling(int intervalMs);
     Q_INVOKABLE void stopStatusPolling();
 
     // Properties
-    QUrl baseUrl() const
-    {
-        return m_baseUrl;
-    }
-
+    QUrl baseUrl() const { return m_baseUrl; }
     void setBaseUrl(const QUrl &u);
-    QString lastResponse() const
-    {
-        return m_lastResponse;
-    }
+
+    QString lastResponse() const { return m_lastResponse; }
 
     // Options als Properties
-    QString username() const
-    {
-        return m_opts.username;
-    }
+    QString username() const { return m_opts.username; }
+    void setUsername(const QString &u) { m_opts.username = u; emit optionsChanged(); }
 
-    void setUsername(const QString &u)
-    {
-        m_opts.username = u;
-        emit optionsChanged();
-    }
+    QString password() const { return m_opts.password; }
+    void setPassword(const QString &p) { m_opts.password = p; emit optionsChanged(); }
 
-    QString password() const
-    {
-        return m_opts.password;
-    }
+    int timeoutMs() const { return m_opts.timeoutMs; }
+    void setTimeoutMs(int t) { m_opts.timeoutMs = t; emit optionsChanged(); }
 
-    void setPassword(const QString &p)
-    {
-        m_opts.password = p;
-        emit optionsChanged();
-    }
-
-    int timeoutMs() const
-    {
-        return m_opts.timeoutMs;
-    }
-
-    void setTimeoutMs(int t)
-    {
-        m_opts.timeoutMs = t;
-        emit optionsChanged();
-    }
-
-    QString userAgent() const
-    {
-        return QString::fromUtf8(m_opts.userAgent);
-    }
-
-    void setUserAgent(const QString &ua)
-    {
-        m_opts.userAgent = ua.toUtf8();
-        emit optionsChanged();
-    }
+    QString userAgent() const { return QString::fromUtf8(m_opts.userAgent); }
+    void setUserAgent(const QString &ua) { m_opts.userAgent = ua.toUtf8(); emit optionsChanged(); }
 
 signals:
     void statusReceived(const QJsonObject &json);
@@ -130,6 +97,9 @@ signals:
     void optionsChanged();
     void errorOccurred(const QString &message);
 
+    // optional: Feedback, wenn Delete erfolgreich war
+    void chainDeleted(GrinNodeManager::NodeKind kind);
+
 private slots:
     void onReplyFinished(QNetworkReply *reply);
 
@@ -141,6 +111,10 @@ private:
     void stop(NodeKind kind);
     void restart(NodeKind kind, const QStringList &args);
     void getLogs(NodeKind kind, int n);
+
+    // NEU: interner Helfer für /delete/<kind>
+    void deleteChain(NodeKind kind);
+
     QNetworkRequest makeRequest(const QString &path) const;
     QByteArray basicAuthHeader() const;
     QString kindToPath(NodeKind kind) const;

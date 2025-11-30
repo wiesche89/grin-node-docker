@@ -2,14 +2,36 @@
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 
+// ------------------------------------------------------------------
+// ErrorOverlay
+// Reusable overlay for controller / network errors.
+// - Shows a short title and description
+// - "Retry" and "Dismiss" via signals
+// - Fully i18n-aware via injected i18n object
+// ------------------------------------------------------------------
 Item {
     id: root
-    property bool active: false
-    property alias title: titleLabel.text
-    property alias message: descLabel.text
-    property var onRetry: null
-    property var onIgnore: null
 
+    // ------------------------------------------------------------------
+    // Public API
+    // ------------------------------------------------------------------
+    // Aktiviert / deaktiviert das Overlay
+    property bool active: false
+
+    // Titel- und Nachrichtentext, können von außen überschrieben werden
+    property string titleText: ""
+    property string messageText: ""
+
+    // i18n-Objekt (QtObject mit t(key)-Funktion), von außen gesetzt
+    property var i18n: null
+
+    // Signale für Buttons
+    signal retry()
+    signal ignore()
+
+    // ------------------------------------------------------------------
+    // Geometry / visual state
+    // ------------------------------------------------------------------
     width: parent ? parent.width * 0.6 : 400
     height: 150
     anchors.horizontalCenter: parent ? parent.horizontalCenter : undefined
@@ -18,6 +40,18 @@ Item {
     visible: active
     z: 99
 
+    // ------------------------------------------------------------------
+    // Local translation helper
+    // ------------------------------------------------------------------
+    function tr(key, fallback) {
+        if (i18n && typeof i18n.t === "function")
+            return i18n.t(key)
+        return fallback || key
+    }
+
+    // ------------------------------------------------------------------
+    // Background card
+    // ------------------------------------------------------------------
     Rectangle {
         anchors.fill: parent
         color: "#050000"
@@ -27,14 +61,20 @@ Item {
         border.width: 1
     }
 
+    // ------------------------------------------------------------------
+    // Content layout: title, description, buttons
+    // ------------------------------------------------------------------
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: 16
         spacing: 8
 
+        // Titel
         Label {
             id: titleLabel
-            text: "Controller-API not available"
+            text: titleText.length > 0
+                  ? titleText
+                  : tr("error_overlay_controller_title", "Controller-API not available")
             font.pixelSize: 18
             color: "white"
             wrapMode: Text.Wrap
@@ -42,9 +82,12 @@ Item {
             Layout.fillWidth: true
         }
 
+        // Beschreibung
         Label {
             id: descLabel
-            text: "Retry if Controller-Api runs"
+            text: messageText.length > 0
+                  ? messageText
+                  : tr("error_overlay_controller_desc", "Retry when the controller API is running.")
             font.pixelSize: 13
             color: "#ccc"
             wrapMode: Text.Wrap
@@ -52,25 +95,24 @@ Item {
             Layout.fillWidth: true
         }
 
+        // Buttons
         RowLayout {
             Layout.alignment: Qt.AlignHCenter
             spacing: 12
 
             Button {
-                text: "Reconnect"
+                text: tr("error_overlay_btn_reconnect", "Reconnect")
                 onClicked: {
-                    root.visible = false
-                    if (typeof root.onRetry === "function")
-                        root.onRetry()
+                    root.active = false
+                    root.retry()
                 }
             }
 
             Button {
-                text: "Dismiss"
+                text: tr("error_overlay_btn_dismiss", "Dismiss")
                 onClicked: {
-                    root.visible = false
-                    if (typeof root.onIgnore === "function")
-                        root.onIgnore()
+                    root.active = false
+                    root.ignore()
                 }
             }
         }

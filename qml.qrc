@@ -14,6 +14,15 @@
         <file>qml/DarkButton.qml</file>
         <file>qml/ErrorOverlay.qml</file>
         <file>qml/Settings.qml</file>
+        <file>qml/I18n.qml</file>
+        <file>qml/translation/de.json</file>
+        <file>qml/translation/en.json</file>
+        <file>qml/translation/fr.json</file>
+        <file>qml/translation/it.json</file>
+        <file>qml/translation/ja.json</file>
+        <file>qml/translation/nl.json</file>
+        <file>qml/translation/ru.json</file>
+        <file>qml/translation/tr.json</file>
     </qresource>
     <qresource prefix="/"/>
 </RCC>
