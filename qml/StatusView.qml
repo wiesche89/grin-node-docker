@@ -5,8 +5,9 @@
 //   - detailed sync progress (headers, PIBD, TxHashset, validation steps)
 //   - chain tip info (height, hashes, total difficulty)
 //
-// The view consumes a rich C++ status object via `currentStatus` and an
-// injected i18n helper object via `i18n`.
+// Expects:
+//   - currentStatus: status object from C++ (nodeOwnerApi)
+//   - i18n: translation helper with .language and .t(key)
 // -----------------------------------------------------------------------------
 
 import QtQuick
@@ -25,7 +26,7 @@ Rectangle {
     border.color: "#555"
     border.width: 1
 
-    // Drop shadow for a subtle 3D card effect
+    // Subtle 3D shadow
     layer.enabled: true
     layer.effect: MultiEffect {
         shadowEnabled: true
@@ -35,54 +36,42 @@ Rectangle {
         shadowColor: "#80000000"
     }
 
-    // =========================================================================
+    // -------------------------------------------------------------------------
     // Public API
-    // =========================================================================
+    // -------------------------------------------------------------------------
 
-    // Full status object from C++ (exposed by nodeOwnerApi)
     property var currentStatus: null
-
-    // Formatted last-update time (HH:MM:SS)
     property string lastUpdated: ""
 
-    // Font sizes & layout behavior depending on card width
-    property int headingFontSize: root.width < 640 ? 16 : 20
-    property int dataFontSize:    root.width < 640 ? 12 : 16
+    // Layout behavior depending on overall width
     property bool compactLayout:  root.width < 640
+    property int headingFontSize: compactLayout ? 16 : 20
+    property int dataFontSize:    compactLayout ? 12 : 16
 
-    // Injected translation object (QtObject from Main.qml)
-    // Must expose:
-    //   property string language
-    //   function t(key: string) -> string
+    // Label column width is derived from the widest translated label
+    // (see labelProbe Item below). A bit of extra padding is added.
+    property real labelColumnWidth: labelProbe.maxWidth + 8
+
+    // Injected translation helper from Main.qml
     property var i18n: null
 
-    // =========================================================================
-    // Local i18n helper
-    // =========================================================================
+    // -------------------------------------------------------------------------
+    // i18n helper
+    // -------------------------------------------------------------------------
 
-    // Small wrapper around the global i18n helper. Fallback text is used when
-    // no i18n object is present or the key does not exist. The dummy read of
-    // `i18n.language` establishes a binding so that all texts react to
-    // language changes.
     function tr(key, fallback) {
         if (!i18n || typeof i18n.t !== "function")
             return fallback || key
 
-        // Make the binding dependency explicit
+        // Bind to language changes
         var _ = i18n.language
-
         return i18n.t(key)
     }
 
-    // =========================================================================
+    // -------------------------------------------------------------------------
     // Utility helpers
-    // =========================================================================
+    // -------------------------------------------------------------------------
 
-    // Safely read a field from the sync-info structure.
-    // Supports:
-    //   - direct JS object: obj[key]
-    //   - QVariantMap-like: obj.value(key)
-    //   - JSON string in obj.jsonString or obj.toString()
     function readInfo(key) {
         var obj = currentStatus ? (currentStatus.syncInfo || currentStatus.sync_info) : null
         if (!obj)
@@ -91,7 +80,7 @@ Rectangle {
         if (obj[key] !== undefined)
             return obj[key]
 
-        // QVariantMap / QJsonObject-like API
+        // QVariantMap-like API
         try {
             if (typeof obj.value === "function") {
                 var v = obj.value(key)
@@ -100,7 +89,7 @@ Rectangle {
             }
         } catch (e) {}
 
-        // As a last resort try to parse an embedded JSON string
+        // Embedded JSON string
         try {
             var s = obj.jsonString || (obj.toString && obj.toString())
             if (s && s.length && s.trim().charAt(0) === "{") {
@@ -113,10 +102,6 @@ Rectangle {
         return undefined
     }
 
-    // Normalize various timestamp representations to epoch millis
-    //  - number as seconds or millis
-    //  - ISO-8601 string
-    //  - { secs, nanos } struct
     function toEpochMillis(ts) {
         if (ts === null || ts === undefined)
             return NaN
@@ -134,7 +119,7 @@ Rectangle {
             return isNaN(t) ? NaN : t
         }
 
-        // Rust-style timespec { secs, nanos }
+        // Rust-style { secs, nanos }
         try {
             if (typeof ts.secs === "number" && typeof ts.nanos === "number")
                 return ts.secs * 1000 + Math.floor(ts.nanos / 1e6)
@@ -143,7 +128,6 @@ Rectangle {
         return NaN
     }
 
-    // Convert bytes to MB with one decimal place
     function bytesToMB(n) {
         var v = Number(n)
         if (!isFinite(v))
@@ -151,7 +135,7 @@ Rectangle {
         return (v / 1000000).toFixed(1)
     }
 
-    // Middle-elide a long string (used for block hashes)
+    // Middle-elide long strings (hashes)
     function midElide(text, maxLen) {
         if (text === null || text === undefined)
             return ""
@@ -160,7 +144,7 @@ Rectangle {
         if (s.length <= maxLen)
             return s
 
-        var keep = maxLen - 3 // space for "..."
+        var keep = maxLen - 3
         if (keep <= 0)
             return "..."
 
@@ -169,23 +153,17 @@ Rectangle {
         return s.substring(0, left) + "..." + s.substring(s.length - right)
     }
 
-    // =========================================================================
-    // Raw sync status & derived values
-    // =========================================================================
+    // -------------------------------------------------------------------------
+    // Sync status & derived values
+    // -------------------------------------------------------------------------
 
-    // Raw sync status string from C++
-    // Typical values:
-    //   "initial", "no_sync", "awaiting_peers", "header_sync",
-    //   "txhashsetpibd_download", "txhashset_download", "txhashset_setup",
-    //   "txhashset_rangeproofs_validation", "txhashset_kernels_validation",
-    //   "txhashset_save", "txhashset_done", "body_sync", "shutdown", ...
     property string _syncStatus: currentStatus
                                   ? (currentStatus.syncStatus
                                      || currentStatus.sync_status
                                      || "")
                                   : ""
 
-    // ---------------------- Header sync (1/7) --------------------------------
+    // Header sync (1/7)
     property var  _hdrCur:  readInfo("current_height")
     property var  _hdrMax:  readInfo("highest_height")
     property bool _showHeaderSync: {
@@ -200,8 +178,7 @@ Rectangle {
                               : 0
     property string _hdrPct:  (_hdrRatio * 100).toFixed(2) + "%"
 
-    // ------------------------ PIBD download (2/7) ----------------------------
-    // Fields: { completed_leaves, leaves_required }
+    // PIBD download (2/7)
     property var  _pibdDone:  readInfo("completed_leaves")
     property var  _pibdTotal: readInfo("leaves_required")
     property bool _isPibd: (_syncStatus === "txhashsetpibd_download"
@@ -218,9 +195,7 @@ Rectangle {
                                : 0
     property string _pibdPct:  (_pibdRatio * 100).toFixed(2) + "%"
 
-    // ---------------- TxHashset download (2/7 fallback) ----------------------
-    // Fields: { downloaded_size, total_size, prev_downloaded_size,
-    //           prev_update_time, start_time }
+    // TxHashset download
     property var _txdlDone:       readInfo("downloaded_size")
     property var _txdlTotal:      readInfo("total_size")
     property var _txdlPrevDone:   readInfo("prev_downloaded_size")
@@ -244,8 +219,6 @@ Rectangle {
         return (done * 100 / tot).toFixed(2) + "%"
     }
 
-    // Approximate speed based on previous update snapshot
-    //   - returns B/ms, which roughly equals kB/s
     property string _txdlSpeedText: {
         if (!_showTxdlActive || !_txdlHasTotal)
             return ""
@@ -260,7 +233,6 @@ Rectangle {
         return bytesPerMs.toFixed(1)
     }
 
-    // Waiting time in seconds until a peer starts the transfer
     property string _txdlWaitingSecs: {
         if (!_showTxdlActive || _txdlHasTotal)
             return ""
@@ -272,8 +244,7 @@ Rectangle {
         return String(secs)
     }
 
-    // -------------------- TxHashset setup (3/7) ------------------------------
-    // Fields: { headers, headers_total, kernel_pos, kernel_pos_total }
+    // TxHashset setup (3/7)
     property var _setupHeaders:        readInfo("headers")
     property var _setupHeadersTotal:   readInfo("headers_total")
     property var _setupKernelPos:      readInfo("kernel_pos")
@@ -293,8 +264,7 @@ Rectangle {
         return isFinite(k) && isFinite(kt) && kt > 0 && k >= 0
     }
 
-    // ---------------- Rangeproofs validation (4/7) ---------------------------
-    // Fields: { rproofs, rproofs_total }
+    // Rangeproofs validation (4/7)
     property var  _rpCount: readInfo("rproofs")
     property var  _rpTotal: readInfo("rproofs_total")
     property bool _showRangeProofs: _syncStatus === "txhashset_rangeproofs_validation"
@@ -306,8 +276,7 @@ Rectangle {
         return String(pct) + "%"
     }
 
-    // ---------------- Kernels validation (5/7) -------------------------------
-    // Fields: { kernels, kernels_total }
+    // Kernels validation (5/7)
     property var  _kvCount: readInfo("kernels")
     property var  _kvTotal: readInfo("kernels_total")
     property bool _showKernels: _syncStatus === "txhashset_kernels_validation"
@@ -319,8 +288,7 @@ Rectangle {
         return String(pct) + "%"
     }
 
-    // ----------------------- Body sync (7/7) ---------------------------------
-    // Fields: { current_height, highest_height }
+    // Body sync (7/7)
     property var  _bodyCur: readInfo("current_height")
     property var  _bodyMax: readInfo("highest_height")
     property bool _showBody: _syncStatus === "body_sync"
@@ -332,11 +300,10 @@ Rectangle {
         return String(pct) + "%"
     }
 
-    // =========================================================================
+    // -------------------------------------------------------------------------
     // Human readable labels
-    // =========================================================================
+    // -------------------------------------------------------------------------
 
-    // Sync status → human-readable, localized label
     property string _syncStatusDisplay: {
         switch (_syncStatus) {
 
@@ -407,28 +374,93 @@ Rectangle {
         }
     }
 
-    // Chain identifier → localized display name.
-    // Add matching keys to i18n:
-    //   "status_chain_main": "mainnet" / "Hauptnetz"
-    //   "status_chain_test": "testnet" / "Testnetz"
     property string _chainDisplay: {
         if (!currentStatus)
             return ""
-
         var c = currentStatus.chain || ""
         if (c === "main")
             return tr("status_chain_main", "mainnet")
         if (c === "test")
             return tr("status_chain_test", "testnet")
-
-        // Fallback: show unknown chains as-is
         return c
     }
 
-    // =========================================================================
-    // Main layout
-    // =========================================================================
+    // -------------------------------------------------------------------------
+    // Hidden label-width probe (computes widest translated label)
+    // -------------------------------------------------------------------------
+    Item {
+        id: labelProbe
+        visible: false
 
+        // Maximum implicitWidth of all label texts we use
+        property real maxWidth: Math.max(
+                                   chainLabelProbe.implicitWidth,
+                                   protocolLabelProbe.implicitWidth,
+                                   userAgentLabelProbe.implicitWidth,
+                                   syncStatusLabelProbe.implicitWidth,
+                                   syncInfoLabelProbe.implicitWidth,
+                                   connectionsLabelProbe.implicitWidth,
+                                   heightLabelProbe.implicitWidth,
+                                   lastBlockLabelProbe.implicitWidth,
+                                   prevBlockLabelProbe.implicitWidth,
+                                   totalDiffLabelProbe.implicitWidth
+                               )
+
+        Text {
+            id: chainLabelProbe
+            text: tr("status_chain", "Chain:")
+            font.pixelSize: dataFontSize
+        }
+        Text {
+            id: protocolLabelProbe
+            text: tr("status_protocol_version", "Protocol Version:")
+            font.pixelSize: dataFontSize
+        }
+        Text {
+            id: userAgentLabelProbe
+            text: tr("status_user_agent", "User Agent:")
+            font.pixelSize: dataFontSize
+        }
+        Text {
+            id: syncStatusLabelProbe
+            text: tr("status_sync_status", "Sync Status:")
+            font.pixelSize: dataFontSize
+        }
+        Text {
+            id: syncInfoLabelProbe
+            text: tr("status_sync_info", "Sync Info:")
+            font.pixelSize: dataFontSize
+        }
+        Text {
+            id: connectionsLabelProbe
+            text: tr("status_connections", "Connections:")
+            font.pixelSize: dataFontSize
+        }
+        Text {
+            id: heightLabelProbe
+            text: tr("status_height", "Height:")
+            font.pixelSize: dataFontSize
+        }
+        Text {
+            id: lastBlockLabelProbe
+            text: tr("status_last_block", "Last Block:")
+            font.pixelSize: dataFontSize
+        }
+        Text {
+            id: prevBlockLabelProbe
+            text: tr("status_prev_block", "Prev Block:")
+            font.pixelSize: dataFontSize
+        }
+        Text {
+            id: totalDiffLabelProbe
+            text: tr("status_total_difficulty", "Total Difficulty:")
+            font.pixelSize: dataFontSize
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Main layout
+    // -------------------------------------------------------------------------
     ColumnLayout {
         anchors.top:    parent.top
         anchors.left:   parent.left
@@ -436,9 +468,7 @@ Rectangle {
         anchors.margins: 16
         spacing: 12
 
-        // ---------------------------------------------------------------------
-        // Header line: title + last update time
-        // ---------------------------------------------------------------------
+        // Header: title + last update
         RowLayout {
             Layout.fillWidth: true
             spacing: 8
@@ -460,19 +490,19 @@ Rectangle {
                 font.pixelSize: dataFontSize
                 color: "#aaaaaa"
                 Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                wrapMode: Text.NoWrap
+                elide: Text.ElideRight
             }
         }
 
-        // Thin divider between header and content
+        // Divider line
         Rectangle {
             height: 1
             color: "#555"
             Layout.fillWidth: true
         }
 
-        // ---------------------------------------------------------------------
-        // Scrollable content: left column = chain/sync, right = connections/tip
-        // ---------------------------------------------------------------------
+        // Scrollable main content
         ScrollView {
             id: statusScrollView
 
@@ -496,7 +526,6 @@ Rectangle {
                 GridLayout {
                     id: statusGrid
 
-                    // Minimum width so horizontal scrolling can kick in
                     width: Math.max(statusScrollView.width, 900)
                     columns: compactLayout ? 1 : 2
                     columnSpacing: compactLayout ? 0 : 40
@@ -509,14 +538,20 @@ Rectangle {
                         Layout.fillWidth: true
                         spacing: 6
 
-                        // Chain (main/test)
+                        // Chain
                         RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 8
+
                             Label {
                                 text: tr("status_chain", "Chain:")
                                 font.pixelSize: dataFontSize
                                 font.bold: true
                                 color: "#ddd"
-                                Layout.preferredWidth: 130
+                                Layout.minimumWidth: labelColumnWidth
+                                Layout.maximumWidth: labelColumnWidth
+                                horizontalAlignment: Text.AlignRight
+                                wrapMode: Text.NoWrap
                             }
                             Label {
                                 text: _chainDisplay
@@ -529,12 +564,18 @@ Rectangle {
 
                         // Protocol version
                         RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 8
+
                             Label {
                                 text: tr("status_protocol_version", "Protocol Version:")
                                 font.pixelSize: dataFontSize
                                 font.bold: true
                                 color: "#ddd"
-                                Layout.preferredWidth: 130
+                                Layout.minimumWidth: labelColumnWidth
+                                Layout.maximumWidth: labelColumnWidth
+                                horizontalAlignment: Text.AlignRight
+                                wrapMode: Text.NoWrap
                             }
                             Label {
                                 text: currentStatus
@@ -551,12 +592,18 @@ Rectangle {
 
                         // User agent
                         RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 8
+
                             Label {
                                 text: tr("status_user_agent", "User Agent:")
                                 font.pixelSize: dataFontSize
                                 font.bold: true
                                 color: "#ddd"
-                                Layout.preferredWidth: 130
+                                Layout.minimumWidth: labelColumnWidth
+                                Layout.maximumWidth: labelColumnWidth
+                                horizontalAlignment: Text.AlignRight
+                                wrapMode: Text.NoWrap
                             }
                             Label {
                                 text: currentStatus
@@ -573,12 +620,18 @@ Rectangle {
 
                         // Sync status
                         RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 8
+
                             Label {
                                 text: tr("status_sync_status", "Sync Status:")
                                 font.pixelSize: dataFontSize
                                 font.bold: true
                                 color: "#ddd"
-                                Layout.preferredWidth: 130
+                                Layout.minimumWidth: labelColumnWidth
+                                Layout.maximumWidth: labelColumnWidth
+                                horizontalAlignment: Text.AlignRight
+                                wrapMode: Text.NoWrap
                             }
                             Label {
                                 text: currentStatus ? _syncStatusDisplay : ""
@@ -589,7 +642,7 @@ Rectangle {
                             }
                         }
 
-                        // ---------------- Header sync progress -----------------
+                        // Header sync progress
                         RowLayout {
                             Layout.fillWidth: true
                             spacing: 8
@@ -600,28 +653,37 @@ Rectangle {
                                 font.pixelSize: dataFontSize
                                 font.bold: true
                                 color: "#ddd"
-                                Layout.preferredWidth: 130
+                                Layout.minimumWidth: labelColumnWidth
+                                Layout.maximumWidth: labelColumnWidth
+                                horizontalAlignment: Text.AlignRight
+                                wrapMode: Text.NoWrap
                             }
 
-                            RowLayout {
+                            ColumnLayout {
                                 Layout.fillWidth: true
-                                spacing: 10
+                                spacing: 2
 
-                                Label {
-                                    text: _hdrPct
-                                    font.pixelSize: dataFontSize
-                                    font.bold: true
-                                    color: "white"
-                                }
-                                Label {
-                                    text: "(" + String(_hdrCur) + " / " + String(_hdrMax) + ")"
-                                    font.pixelSize: dataFontSize
-                                    color: "#999"
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 6
+
+                                    Label {
+                                        text: _hdrPct
+                                        font.pixelSize: dataFontSize
+                                        font.bold: true
+                                        color: "white"
+                                    }
+                                    Label {
+                                        text: "(" + String(_hdrCur) + " / " + String(_hdrMax) + ")"
+                                        font.pixelSize: dataFontSize
+                                        color: "#999"
+                                        wrapMode: Text.NoWrap
+                                    }
                                 }
                             }
                         }
 
-                        // ------------------- PIBD progress ---------------------
+                        // PIBD progress
                         RowLayout {
                             Layout.fillWidth: true
                             spacing: 8
@@ -632,28 +694,37 @@ Rectangle {
                                 font.pixelSize: dataFontSize
                                 font.bold: true
                                 color: "#ddd"
-                                Layout.preferredWidth: 130
+                                Layout.minimumWidth: labelColumnWidth
+                                Layout.maximumWidth: labelColumnWidth
+                                horizontalAlignment: Text.AlignRight
+                                wrapMode: Text.NoWrap
                             }
 
-                            RowLayout {
+                            ColumnLayout {
                                 Layout.fillWidth: true
-                                spacing: 10
+                                spacing: 2
 
-                                Label {
-                                    text: _pibdPct
-                                    font.pixelSize: dataFontSize
-                                    font.bold: true
-                                    color: "white"
-                                }
-                                Label {
-                                    text: "(" + String(_pibdDone) + " / " + String(_pibdTotal) + ")"
-                                    font.pixelSize: dataFontSize
-                                    color: "#999"
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 6
+
+                                    Label {
+                                        text: _pibdPct
+                                        font.pixelSize: dataFontSize
+                                        font.bold: true
+                                        color: "white"
+                                    }
+                                    Label {
+                                        text: "(" + String(_pibdDone) + " / " + String(_pibdTotal) + ")"
+                                        font.pixelSize: dataFontSize
+                                        color: "#999"
+                                        wrapMode: Text.NoWrap
+                                    }
                                 }
                             }
                         }
 
-                        // ------- TxHashset download with known total size -----
+                        // TxHashset download (known total)
                         RowLayout {
                             Layout.fillWidth: true
                             spacing: 8
@@ -664,14 +735,19 @@ Rectangle {
                                 font.pixelSize: dataFontSize
                                 font.bold: true
                                 color: "#ddd"
-                                Layout.preferredWidth: 130
+                                Layout.minimumWidth: labelColumnWidth
+                                Layout.maximumWidth: labelColumnWidth
+                                horizontalAlignment: Text.AlignRight
+                                wrapMode: Text.NoWrap
                             }
 
                             ColumnLayout {
+                                Layout.fillWidth: true
                                 spacing: 2
 
                                 RowLayout {
-                                    spacing: 10
+                                    Layout.fillWidth: true
+                                    spacing: 6
 
                                     Label {
                                         text: _txdlPct
@@ -687,6 +763,7 @@ Rectangle {
                                               + " MB)"
                                         font.pixelSize: dataFontSize
                                         color: "#999"
+                                        wrapMode: Text.NoWrap
                                     }
                                 }
 
@@ -699,11 +776,13 @@ Rectangle {
                                           .replace("%2", _txdlSpeedText)
                                     font.pixelSize: dataFontSize
                                     color: "#bbb"
+                                    Layout.fillWidth: true
+                                    wrapMode: Text.WordWrap
                                 }
                             }
                         }
 
-                        // ------- TxHashset download waiting for peer ----------
+                        // TxHashset download (waiting)
                         RowLayout {
                             Layout.fillWidth: true
                             spacing: 8
@@ -714,7 +793,10 @@ Rectangle {
                                 font.pixelSize: dataFontSize
                                 font.bold: true
                                 color: "#ddd"
-                                Layout.preferredWidth: 130
+                                Layout.minimumWidth: labelColumnWidth
+                                Layout.maximumWidth: labelColumnWidth
+                                horizontalAlignment: Text.AlignRight
+                                wrapMode: Text.NoWrap
                             }
 
                             Label {
@@ -730,7 +812,7 @@ Rectangle {
                             }
                         }
 
-                        // --------------------- TxHashset setup -----------------
+                        // TxHashset setup
                         RowLayout {
                             Layout.fillWidth: true
                             spacing: 8
@@ -741,7 +823,10 @@ Rectangle {
                                 font.pixelSize: dataFontSize
                                 font.bold: true
                                 color: "#ddd"
-                                Layout.preferredWidth: 130
+                                Layout.minimumWidth: labelColumnWidth
+                                Layout.maximumWidth: labelColumnWidth
+                                horizontalAlignment: Text.AlignRight
+                                wrapMode: Text.NoWrap
                             }
 
                             Label {
@@ -760,7 +845,7 @@ Rectangle {
                             }
                         }
 
-                        // ---------------- Rangeproofs validation --------------
+                        // Rangeproofs validation
                         RowLayout {
                             Layout.fillWidth: true
                             spacing: 8
@@ -771,11 +856,15 @@ Rectangle {
                                 font.pixelSize: dataFontSize
                                 font.bold: true
                                 color: "#ddd"
-                                Layout.preferredWidth: 130
+                                Layout.minimumWidth: labelColumnWidth
+                                Layout.maximumWidth: labelColumnWidth
+                                horizontalAlignment: Text.AlignRight
+                                wrapMode: Text.NoWrap
                             }
 
-                            RowLayout {
-                                spacing: 8
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 2
 
                                 Label {
                                     text: tr(
@@ -784,17 +873,20 @@ Rectangle {
                                           ).replace("%1", _rpPct)
                                     font.pixelSize: dataFontSize
                                     color: "#bbb"
+                                    Layout.fillWidth: true
+                                    wrapMode: Text.WordWrap
                                 }
                                 Label {
                                     visible: isFinite(Number(_rpTotal)) && Number(_rpTotal) > 0
                                     text: "(" + String(_rpCount) + " / " + String(_rpTotal) + ")"
                                     font.pixelSize: dataFontSize
                                     color: "#999"
+                                    wrapMode: Text.NoWrap
                                 }
                             }
                         }
 
-                        // ------------------ Kernels validation ----------------
+                        // Kernels validation
                         RowLayout {
                             Layout.fillWidth: true
                             spacing: 8
@@ -805,11 +897,15 @@ Rectangle {
                                 font.pixelSize: dataFontSize
                                 font.bold: true
                                 color: "#ddd"
-                                Layout.preferredWidth: 130
+                                Layout.minimumWidth: labelColumnWidth
+                                Layout.maximumWidth: labelColumnWidth
+                                horizontalAlignment: Text.AlignRight
+                                wrapMode: Text.NoWrap
                             }
 
-                            RowLayout {
-                                spacing: 8
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 2
 
                                 Label {
                                     text: tr(
@@ -818,17 +914,20 @@ Rectangle {
                                           ).replace("%1", _kvPct)
                                     font.pixelSize: dataFontSize
                                     color: "#bbb"
+                                    Layout.fillWidth: true
+                                    wrapMode: Text.WordWrap
                                 }
                                 Label {
                                     visible: isFinite(Number(_kvTotal)) && Number(_kvTotal) > 0
                                     text: "(" + String(_kvCount) + " / " + String(_kvTotal) + ")"
                                     font.pixelSize: dataFontSize
                                     color: "#999"
+                                    wrapMode: Text.NoWrap
                                 }
                             }
                         }
 
-                        // ------------------------ Body sync -------------------
+                        // Body sync
                         RowLayout {
                             Layout.fillWidth: true
                             spacing: 8
@@ -839,12 +938,15 @@ Rectangle {
                                 font.pixelSize: dataFontSize
                                 font.bold: true
                                 color: "#ddd"
-                                Layout.preferredWidth: 130
+                                Layout.minimumWidth: labelColumnWidth
+                                Layout.maximumWidth: labelColumnWidth
+                                horizontalAlignment: Text.AlignRight
+                                wrapMode: Text.NoWrap
                             }
 
-                            RowLayout {
+                            ColumnLayout {
                                 Layout.fillWidth: true
-                                spacing: 10
+                                spacing: 2
 
                                 Label {
                                     text: tr(
@@ -853,12 +955,15 @@ Rectangle {
                                           ).replace("%1", _bodyPct)
                                     font.pixelSize: dataFontSize
                                     color: "#bbb"
+                                    Layout.fillWidth: true
+                                    wrapMode: Text.WordWrap
                                 }
                                 Label {
                                     visible: isFinite(Number(_bodyMax)) && Number(_bodyMax) > 0
                                     text: "(" + String(_bodyCur) + " / " + String(_bodyMax) + ")"
                                     font.pixelSize: dataFontSize
                                     color: "#999"
+                                    wrapMode: Text.NoWrap
                                 }
                             }
                         }
@@ -873,12 +978,18 @@ Rectangle {
 
                         // Connections
                         RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 8
+
                             Label {
                                 text: tr("status_connections", "Connections:")
                                 font.pixelSize: dataFontSize
                                 font.bold: true
                                 color: "#ddd"
-                                Layout.preferredWidth: 130
+                                Layout.minimumWidth: labelColumnWidth
+                                Layout.maximumWidth: labelColumnWidth
+                                horizontalAlignment: Text.AlignRight
+                                wrapMode: Text.NoWrap
                             }
                             Label {
                                 text: currentStatus
@@ -891,14 +1002,20 @@ Rectangle {
                             }
                         }
 
-                        // Height (tip height)
+                        // Height
                         RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 8
+
                             Label {
                                 text: tr("status_height", "Height:")
                                 font.pixelSize: dataFontSize
                                 font.bold: true
                                 color: "#ddd"
-                                Layout.preferredWidth: 130
+                                Layout.minimumWidth: labelColumnWidth
+                                Layout.maximumWidth: labelColumnWidth
+                                horizontalAlignment: Text.AlignRight
+                                wrapMode: Text.NoWrap
                             }
                             Label {
                                 text: currentStatus && currentStatus.tip
@@ -911,14 +1028,20 @@ Rectangle {
                             }
                         }
 
-                        // Last block hash
+                        // Last block
                         RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 8
+
                             Label {
                                 text: tr("status_last_block", "Last Block:")
                                 font.pixelSize: dataFontSize
                                 font.bold: true
                                 color: "#ddd"
-                                Layout.preferredWidth: 130
+                                Layout.minimumWidth: labelColumnWidth
+                                Layout.maximumWidth: labelColumnWidth
+                                horizontalAlignment: Text.AlignRight
+                                wrapMode: Text.NoWrap
                             }
                             Label {
                                 text: currentStatus && currentStatus.tip
@@ -932,19 +1055,24 @@ Rectangle {
                                 font.pixelSize: dataFontSize
                                 color: "white"
                                 Layout.fillWidth: true
-                                wrapMode: Text.NoWrap
-                                elide: Text.ElideNone
+                                wrapMode: Text.WordWrap
                             }
                         }
 
-                        // Previous block hash
+                        // Previous block
                         RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 8
+
                             Label {
                                 text: tr("status_prev_block", "Prev Block:")
                                 font.pixelSize: dataFontSize
                                 font.bold: true
                                 color: "#ddd"
-                                Layout.preferredWidth: 130
+                                Layout.minimumWidth: labelColumnWidth
+                                Layout.maximumWidth: labelColumnWidth
+                                horizontalAlignment: Text.AlignRight
+                                wrapMode: Text.NoWrap
                             }
                             Label {
                                 text: currentStatus && currentStatus.tip
@@ -958,19 +1086,24 @@ Rectangle {
                                 font.pixelSize: dataFontSize
                                 color: "white"
                                 Layout.fillWidth: true
-                                wrapMode: Text.NoWrap
-                                elide: Text.ElideNone
+                                wrapMode: Text.WordWrap
                             }
                         }
 
                         // Total difficulty
                         RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 8
+
                             Label {
                                 text: tr("status_total_difficulty", "Total Difficulty:")
                                 font.pixelSize: dataFontSize
                                 font.bold: true
                                 color: "#ddd"
-                                Layout.preferredWidth: 130
+                                Layout.minimumWidth: labelColumnWidth
+                                Layout.maximumWidth: labelColumnWidth
+                                horizontalAlignment: Text.AlignRight
+                                wrapMode: Text.NoWrap
                             }
                             Label {
                                 text: currentStatus && currentStatus.tip
@@ -990,13 +1123,13 @@ Rectangle {
         }
     }
 
-    // =========================================================================
-    // Backend connection: subscribe to nodeOwnerApi status updates
-    // =========================================================================
+    // -------------------------------------------------------------------------
+    // Connection to C++ backend (nodeOwnerApi)
+    // -------------------------------------------------------------------------
     Connections {
         target: nodeOwnerApi
 
-        // Called from C++ when a new status object is available
+        // Called when a new status object is available
         function onStatusUpdated(statusObj) {
             root.currentStatus = statusObj
 

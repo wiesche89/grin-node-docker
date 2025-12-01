@@ -140,6 +140,7 @@
   "settings_chain_deleted_grinpp": "Grin++ node chain data deleted.",
   "settings_chain_deleted_generic": "Chain data deleted.",
   "settings_chain_delete_failed": "Failed to delete chain data.\nPlease check the controller logs on your Umbrel node.",
+  "settings_chain_deleting": "Deleting chain data…",
   "settings_language_title": "Language",
   "settings_language_label": "App language",
   "settings_language_en": "English",

@@ -21,16 +21,8 @@ QtObject {
     // Loaded translations: key -> string
     property var dict: ({})    // replaced when JSON is loaded
 
-    // Base path for JSON files
-    // Project layout (from your screenshot):
-    //   qml.qrc  ->  /qml/qml/translation/en.json  etc.
-    //
-    // Desktop / native: use qrc:
-    // WASM:            use plain HTTP path served by the web server
-    property string basePath: (
-        Qt.platform.os === "wasm" || Qt.platform.os === "wasm-emscripten"
-    ) ? "translation/"              // e.g. /translation/en.json via HTTP
-      : "qrc:/qml/qml/translation/" // e.g. qrc:/qml/qml/translation/en.json
+    // Flag: translations are loaded and ready
+    property bool loaded: false
 
     // ------------------------------------------------------------------
     // Internal: load JSON for a language
@@ -39,37 +31,62 @@ QtObject {
         if (!lang || typeof lang !== "string")
             lang = "en"
 
-        // Resolve the full URL (handles qrc: and relative HTTP paths)
-        var url = Qt.resolvedUrl(basePath + lang + ".json")
+        // Beim Start: noch nicht geladen
+        loaded = false
+        dict = ({})
+
+        // Relativ zu I18n.qml:
+        // I18n.qml:          qrc:/qml/qml/I18n.qml
+        // en.json erwartet:  qrc:/qml/qml/translation/en.json
+        var url = Qt.resolvedUrl("translation/" + lang + ".json")
+
+        console.log("I18n: loadLanguage(", lang, "), resolved url =", url)
 
         var xhr = new XMLHttpRequest()
         xhr.open("GET", url)
 
         xhr.onreadystatechange = function() {
+            console.log("I18n: XHR state change for", url,
+                        "readyState =", xhr.readyState,
+                        "status =", xhr.status)
+
             if (xhr.readyState !== XMLHttpRequest.DONE)
                 return
 
+            console.log("I18n: XHR DONE for", url,
+                        "status =", xhr.status,
+                        "response length =",
+                        xhr.responseText ? xhr.responseText.length : 0)
+
             if (xhr.status === 200 || xhr.status === 0) {
-                // status 0 can happen for qrc:/ or some embedded/WASM setups
                 try {
-                    dict = JSON.parse(xhr.responseText)
-                    // console.log("I18n: loaded language", lang, "from", url)
+                    var obj = JSON.parse(xhr.responseText)
+                    dict = obj
+                    var keyCount = Object.keys(dict).length
+                    loaded = true  // <- wichtig: triggert Rebinding
+                    console.log("I18n: successfully loaded language", lang,
+                                "with", keyCount, "keys from", url)
                 } catch (e) {
-                    console.error("I18n: failed to parse JSON for", lang, e)
+                    console.error("I18n: failed to parse JSON for", lang,
+                                  "from", url, "error:", e)
                     dict = ({})
+                    loaded = false
                 }
             } else {
-                console.warn("I18n: translation file missing or HTTP error:", url,
-                             "status:", xhr.status)
+                console.warn("I18n: translation file missing or HTTP error:",
+                             url, "status:", xhr.status)
                 dict = ({})
+                loaded = false
 
                 // Simple fallback to English if the requested language failed
                 if (lang !== "en") {
+                    console.log("I18n: retrying with English fallback")
                     loadLanguage("en")
                 }
             }
         }
 
+        console.log("I18n: sending XHR for", url)
         xhr.send()
     }
 
@@ -77,17 +94,25 @@ QtObject {
     // Initialization
     // ------------------------------------------------------------------
     Component.onCompleted: {
+        console.log("I18n: Component.onCompleted, initial language =", language)
+
         // Read initial language from settings if available
-        if (settingsStore && settingsStore.languageCode)
+        if (settingsStore && settingsStore.languageCode) {
             language = settingsStore.languageCode
+            console.log("I18n: language restored from settings:", language)
+        }
 
         loadLanguage(language)
     }
 
     onLanguageChanged: {
+        console.log("I18n: language changed to", language)
+
         // Persist language choice to settings
-        if (settingsStore)
+        if (settingsStore) {
             settingsStore.languageCode = language
+            console.log("I18n: language stored to settings:", language)
+        }
 
         loadLanguage(language)
     }
@@ -96,22 +121,31 @@ QtObject {
     // Public API: translate key
     // ------------------------------------------------------------------
 
-    // Basic translation: returns the translated value or the key itself
-    // if missing (and logs a warning to the console).
     function t(key) {
+        // Trick: Zugriff auf 'loaded', damit QML-Bindings eine
+        // Abhängigkeit auf diese Property bekommen
+        var _ = loaded
+
         if (!key || typeof key !== "string")
             return ""
 
-        if (dict && dict.hasOwnProperty(key) && dict[key] !== undefined)
+        // Solange noch nicht geladen: keine Warnung spammen
+        if (!loaded) {
+            // optional: leeren String zurückgeben statt Key:
+            // return ""
+            return key
+        }
+
+        if (dict && dict.hasOwnProperty(key) && dict[key] !== undefined) {
             return String(dict[key])
+        }
 
         console.warn("I18n: missing translation for key:", key,
-                     "language:", language)
+                     "language:", language,
+                     "(dict keys =", (dict ? Object.keys(dict).length : 0), ")")
         return key
     }
 
-    // Translation with explicit fallback text:
-    // if the key is missing, returns the provided fallback instead.
     function tf(key, fallback) {
         var value = t(key)
         if (value === key && fallback !== undefined && fallback !== null)

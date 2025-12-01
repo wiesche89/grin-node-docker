@@ -282,18 +282,18 @@ void GrinNodeManager::onReplyFinished(QNetworkReply *reply)
     }
 
     // Routing nur noch über apiPath
-    if (apiPath.startsWith("status")) {
+    if (apiPath.contains("status")) {
         const auto doc = QJsonDocument::fromJson(payload);
         emit statusReceived(doc.object());
-    } else if (apiPath.startsWith("logs/")) {
+    } else if (apiPath.contains("logs/")) {
         emit logsReceived(QString::fromUtf8(payload));
-    } else if (apiPath.startsWith("start/")) {
+    } else if (apiPath.contains("start/")) {
         emit nodeStarted(apiPath.contains("rust") ? NodeKind::Rust : NodeKind::GrinPP);
-    } else if (apiPath.startsWith("stop/")) {
+    } else if (apiPath.contains("stop/")) {
         emit nodeStopped(apiPath.contains("rust") ? NodeKind::Rust : NodeKind::GrinPP);
-    } else if (apiPath.startsWith("restart/")) {
+    } else if (apiPath.contains("restart/")) {
         emit nodeRestarted(apiPath.contains("rust") ? NodeKind::Rust : NodeKind::GrinPP);
-    } else if (apiPath.startsWith("delete/")) {
+    } else if (apiPath.contains("delete/")) {
         emit chainDeleted(apiPath.contains("rust") ? NodeKind::Rust : NodeKind::GrinPP);
     }
 

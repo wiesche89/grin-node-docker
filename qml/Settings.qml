@@ -299,20 +299,36 @@ Item {
                         Layout.fillWidth: true
                     }
 
+                    // Default controller URL (mit sicherem .arg())
                     Label {
-                        text: (i18n
-                               ? i18n.t("settings_controller_default").arg(defaultControllerUrl)
-                               : "Default (web): " + defaultControllerUrl)
+                        text: {
+                            var base = i18n
+                                ? i18n.t("settings_controller_default")
+                                : "Default (web): %1"
+                            var url = defaultControllerUrl
+
+                            if (base.indexOf("%1") !== -1)
+                                return base.arg(url)
+                            return base + " " + url
+                        }
                         color: "#bbbbbb"
                         font.pixelSize: 14
                         wrapMode: Text.WordWrap
                         Layout.fillWidth: true
                     }
 
+                    // Aktive controller URL (mit sicherem .arg())
                     Label {
-                        text: (i18n
-                               ? i18n.t("settings_controller_active").arg(effectiveControllerUrl)
-                               : "Active: " + effectiveControllerUrl)
+                        text: {
+                            var base = i18n
+                                ? i18n.t("settings_controller_active")
+                                : "Active: %1"
+                            var url = effectiveControllerUrl
+
+                            if (base.indexOf("%1") !== -1)
+                                return base.arg(url)
+                            return base + " " + url
+                        }
                         color: "#bbbbbb"
                         font.pixelSize: 14
                         wrapMode: Text.WordWrap
@@ -515,6 +531,11 @@ Item {
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.bottom
         anchors.bottomMargin: 24
+        // Breite explizit setzen, z.B. 40px Rand links/rechts
+        width: parent.width - 40
+        // Höhe vom Inhalt ableiten
+        height: contentRow.implicitHeight + 24
+
         radius: 6
         color: "#2e7d32"
         visible: lastDeleteMessage.length > 0
@@ -526,8 +547,9 @@ Item {
         }
 
         RowLayout {
-            anchors.margins: 12
+            id: contentRow
             anchors.fill: parent
+            anchors.margins: 12
             spacing: 8
 
             Label {
@@ -536,6 +558,7 @@ Item {
                 font.pixelSize: 14
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
+                horizontalAlignment: Text.AlignHCenter
             }
         }
     }
