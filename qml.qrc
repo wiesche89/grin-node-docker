@@ -24,6 +24,7 @@
         <file>qml/translation/ru.json</file>
         <file>qml/translation/tr.json</file>
         <file>qml/translation/zh.json</file>
+        <file>qml/translation/es.json</file>
     </qresource>
     <qresource prefix="/"/>
 </RCC>
