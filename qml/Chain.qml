@@ -14,6 +14,9 @@ Item {
     property bool compactLayout: false
     property var i18n: null        // injected from Main.qml
 
+    // Node manager from C++ (GrinNodeManager)
+    property var nodeManager: null
+
     // Foreign API (set in main.cpp as nodeForeignApi context property)
     readonly property var foreignApi: nodeForeignApi
 
@@ -45,7 +48,6 @@ Item {
 
         return String(res)
     }
-
 
     // ---------------------------------------------------
     // Generic helpers
@@ -173,6 +175,22 @@ Item {
     property int detailsHeight: hdrData ? hdrData.height : -1
 
     // ---------------------------------------------------
+    // Helper: alles leeren (keine alten Artefakte)
+    // ---------------------------------------------------
+    function clearChainView() {
+        tip = { height: 0, lastBlockPushed: "", prevBlockToLast: "", totalDifficulty: 0 }
+        blocksRaw = []
+        blocks = []
+        selectedIndex = -1
+
+        if (status)
+            status.message = ""
+
+        if (tabsBar)
+            tabsBar.currentIndex = 0
+    }
+
+    // ---------------------------------------------------
     // API calls
     // ---------------------------------------------------
     function refreshTip() {
@@ -214,6 +232,9 @@ Item {
     onNodeRunningChanged: {
         if (nodeRunning && foreignApi) {
             refreshTip()
+        } else {
+            // Node aus -> UI leeren
+            clearChainView()
         }
     }
 
@@ -768,7 +789,6 @@ Item {
     // Dark UI helper components
     // ---------------------------------------------------
 
-    // Dark button used in status bar etc.
     component DarkButton: Button {
         id: darkBtnCtrl
         property color bg: hovered ? "#3a3a3a" : "#2b2b2b"
@@ -791,7 +811,6 @@ Item {
         }
     }
 
-    // Dark-styled TabButton for the tab bar
     component DarkTabButton: TabButton {
         id: darkTabCtrl
         property color bgNormal: hovered ? "#3a3a3a" : "#2b2b2b"
@@ -837,7 +856,6 @@ Item {
         font.pixelSize: 14
     }
 
-    // Single chain node: tile + connector arrow
     component ChainNode: Item {
         property var blk
         property bool showConnector: true
@@ -892,7 +910,6 @@ Item {
         }
     }
 
-    // Single block tile (card) in the chain row
     component BlockTile: Rectangle {
         id: tileRect
         property var blk
@@ -965,7 +982,6 @@ Item {
         }
     }
 
-    // Simple status bar for transient messages
     component StatusBar: Rectangle {
         id: sb
         property string message: ""
@@ -1020,6 +1036,24 @@ Item {
             interval: 4000
             running: false
             onTriggered: sb.message = ""
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // Listen to GrinNodeManager (nodeManager) and clear on stop/restart
+    // -----------------------------------------------------------------
+    Connections {
+        target: nodeManager
+
+        function onNodeStopped(kind) {
+            clearChainView()
+        }
+
+        function onNodeRestarted(kind) {
+            clearChainView()
+            if (nodeRunning && foreignApi) {
+                refreshTip()
+            }
         }
     }
 }

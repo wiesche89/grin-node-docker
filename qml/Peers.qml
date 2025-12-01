@@ -8,6 +8,9 @@ Item {
     Layout.fillWidth: true
     Layout.fillHeight: true
 
+    // Node manager from C++ (GrinNodeManager)
+    property var nodeManager: null
+
     // ---------------------------------------------------
     // Public state
     // ---------------------------------------------------
@@ -29,7 +32,6 @@ Item {
 
     // ---------------------------------------------------
     // Local translation helper
-    // (uses global i18n if available, falls back to given default)
     // ---------------------------------------------------
     function tr(key, fallback) {
         if (typeof i18n !== "undefined" && i18n && i18n.t)
@@ -41,7 +43,6 @@ Item {
     // Helpers
     // ---------------------------------------------------
     function flagsToString(flags) {
-        // Map internal flags to localized human-readable state
         switch (flags) {
         case 0: return tr("peers_state_healthy", "Healthy")
         case 1: return tr("peers_state_banned", "Banned")
@@ -64,7 +65,6 @@ Item {
 
     function isBanned(flags) { return parseFlags(flags) === 1 }
 
-    // Build "time ago" string in a localized way
     function agoString(epochSecs) {
         if (!epochSecs || epochSecs <= 0) return ""
         var now = Math.floor(Date.now() / 1000)
@@ -95,7 +95,6 @@ Item {
         return ""
     }
 
-    // robust UA extraction across differently named fields
     function uaFromPeer(p) {
         if (!p) return ""
         if (typeof p.userAgent === "string" && p.userAgent.length) return p.userAgent
@@ -115,6 +114,22 @@ Item {
         }
     }
 
+    // **Neu**: alles zurücksetzen (wie im Status View)
+    function clearPeersView() {
+        loading = false
+        errorText = ""
+        peers = []
+        filteredPeers = []
+        uaOptions = [tr("peers_filter_all", "All")]
+        peersStatusText = ""
+
+        if (stateFilter) stateFilter.currentIndex = 0
+        if (banFilter)   banFilter.currentIndex   = 0
+        if (uaFilter)    uaFilter.currentIndex    = 0
+        if (uaMustExist) uaMustExist.checked      = false
+        if (searchField) searchField.text         = ""
+    }
+
     // ---------------------------------------------------
     // UA options (dropdown) builder
     // ---------------------------------------------------
@@ -125,19 +140,20 @@ Item {
             if (ua) set[ua] = true
         }
         var arr = Object.keys(set).sort()
-        if (arr.length > 300) arr = arr.slice(0, 300)   // safety limit
+        if (arr.length > 300) arr = arr.slice(0, 300)
 
         uaOptions = [tr("peers_filter_all", "All")].concat(arr)
-        if (uaFilter.currentIndex >= uaOptions.length) uaFilter.currentIndex = 0
+        if (uaFilter && uaFilter.currentIndex >= uaOptions.length)
+            uaFilter.currentIndex = 0
     }
 
     // ---------------------------------------------------
     // Filtering
     // ---------------------------------------------------
     function applyFilter() {
-        var stateSel = stateFilter.currentIndex     // 0 All, 1 Healthy, 2 Banned, 3 Defunct
-        var banSel   = banFilter.currentIndex       // 0 All, 1 Banned, 2 Unbanned
-        var uaSel    = uaFilter.currentIndex        // 0 All, >0 exact UA match
+        var stateSel = stateFilter.currentIndex
+        var banSel   = banFilter.currentIndex
+        var uaSel    = uaFilter.currentIndex
         var q = (searchField.text || "").toLowerCase().trim()
 
         var out = []
@@ -147,25 +163,20 @@ Item {
             var ua = uaFromPeer(p)
             var banned = (flags === 1)
 
-            // by state
             if (stateSel === 1 && flags !== 0) continue
             if (stateSel === 2 && flags !== 1) continue
             if (stateSel === 3 && flags !== 2) continue
 
-            // by banned/unbanned
             if (banSel === 1 && !banned) continue
             if (banSel === 2 &&  banned) continue
 
-            // by "only with UA"
             if (uaMustExist.checked && (!ua || ua.length === 0)) continue
 
-            // by UA dropdown exact match
             if (uaSel > 0) {
                 var want = uaOptions[uaSel]
                 if (ua !== want) continue
             }
 
-            // free-text search across address OR UA
             if (q.length) {
                 var addr = addrFromPeer(p).toLowerCase()
                 var uaLower = ua.toLowerCase()
@@ -183,7 +194,6 @@ Item {
         } else if (loading) {
             peersStatusText = tr("peers_loading", "Loading peers...")
         } else {
-            // "X / Y peers"
             var tmpl = tr("peers_status_count", "%1 / %2 peers")
             peersStatusText = tmpl.replace("%1", filteredPeers.length)
                                    .replace("%2", peers.length)
@@ -194,11 +204,7 @@ Item {
     onErrorTextChanged: updatePeersStatusText()
     onFilteredPeersChanged: updatePeersStatusText()
 
-    // ---------------------------------------------------
-    // Result helper for async owner API calls
-    // ---------------------------------------------------
     function isResultOk(result) {
-        // Most owner APIs are very relaxed – we treat "no explicit error" as success.
         if (result === undefined || result === null)
             return true
 
@@ -212,7 +218,6 @@ Item {
                 return !!result.success
             if ("error" in result && result.error)
                 return false
-            // No obvious error field -> assume success
             return true
         }
 
@@ -226,9 +231,6 @@ Item {
         return true
     }
 
-    // ---------------------------------------------------
-    // Dark button component (reusable styled button)
-    // ---------------------------------------------------
     Component {
         id: darkButton
         Button {
@@ -266,9 +268,6 @@ Item {
         anchors.margins: compactLayout ? 12 : 20
         spacing: 14
 
-        // ------------------------------------------------
-        // Header
-        // ------------------------------------------------
         GridLayout {
             Layout.fillWidth: true
             columns: compactLayout ? 1 : 2
@@ -284,9 +283,6 @@ Item {
             }
         }
 
-        // ------------------------------------------------
-        // Status line (loading / count / error)
-        // ------------------------------------------------
         GridLayout {
             Layout.fillWidth: true
             columns: compactLayout ? 1 : 3
@@ -309,9 +305,6 @@ Item {
             }
         }
 
-        // ------------------------------------------------
-        // Filters row
-        // ------------------------------------------------
         GridLayout {
             id: filterGrid
             Layout.fillWidth: true
@@ -319,7 +312,6 @@ Item {
             columnSpacing: compactLayout ? 8 : 16
             rowSpacing: compactLayout ? 8 : 12
 
-            // State filter
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: 4
@@ -337,7 +329,6 @@ Item {
                 }
             }
 
-            // Banned filter
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: 4
@@ -354,7 +345,6 @@ Item {
                 }
             }
 
-            // User agent filter + checkbox
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: 4
@@ -388,7 +378,6 @@ Item {
                 }
             }
 
-            // Free text search
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: 4
@@ -402,9 +391,6 @@ Item {
             }
         }
 
-        // ------------------------------------------------
-        // Peers list
-        // ------------------------------------------------
         ListView {
             id: list
             Layout.fillWidth: true
@@ -434,7 +420,6 @@ Item {
                     columnSpacing: 12
                     rowSpacing: 6
 
-                    // Left column: address, state, UA, last seen
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: 2
@@ -477,7 +462,6 @@ Item {
                         }
                     }
 
-                    // Right column: ban/unban actions
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: 4
@@ -497,7 +481,6 @@ Item {
                                 onClicked: {
                                     var addr = apiAddrFromPeer(modelData)
                                     if (addr && nodeOwnerApi) {
-                                        // show spinner while ban is in progress
                                         loading = true
                                         errorText = ""
                                         nodeOwnerApi.banPeerAsync(addr)
@@ -514,7 +497,6 @@ Item {
                                 onClicked: {
                                     var addr = apiAddrFromPeer(modelData)
                                     if (addr && nodeOwnerApi) {
-                                        // show spinner while unban is in progress
                                         loading = true
                                         errorText = ""
                                         nodeOwnerApi.unbanPeerAsync(addr)
@@ -526,13 +508,8 @@ Item {
                 }
             }
 
-            // ------------------------------------------------
-            // Footer (shown only when list is empty)
-            // ------------------------------------------------
             footer: Item {
                 width: list.width
-                // Only show footer with text when there are no filtered peers,
-                // node is running and not loading. Otherwise keep it minimal.
                 height: (filteredPeers.length === 0 && nodeRunning && !loading) ? 64 : 0
 
                 Column {
@@ -546,7 +523,7 @@ Item {
                               : tr("peers_no_data", "No peers connected")
                         color: "#777"
                         horizontalAlignment: Text.AlignHCenter
-                        width: list.width   // allow wrapping
+                        width: list.width
                         wrapMode: Text.Wrap
                     }
 
@@ -575,7 +552,6 @@ Item {
     Connections {
         target: nodeOwnerApi
 
-        // Called when peers have been loaded from backend
         function onGetPeersFinishedQml(list) {
             loading = false
             errorText = ""
@@ -584,11 +560,9 @@ Item {
             applyFilter()
         }
 
-        // Ban result handling
         function onBanPeerFinished(result) {
             if (!nodeRunning) return
             if (isResultOk(result)) {
-                // Keep spinner running until getPeersAsync finishes
                 errorText = ""
                 refresh()
             } else {
@@ -597,7 +571,6 @@ Item {
             }
         }
 
-        // Unban result handling
         function onUnbanPeerFinished(result) {
             if (!nodeRunning) return
             if (isResultOk(result)) {
@@ -606,6 +579,27 @@ Item {
             } else {
                 loading = false
                 errorText = tr("peers_unban_failed", "Unban failed")
+            }
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // Listen to GrinNodeManager (nodeManager) and clear on stop/restart
+    // -----------------------------------------------------------------
+    Connections {
+        target: nodeManager
+
+        function onNodeStopped(kind) {
+            // egal ob Rust oder GrinPP – Peers-Ansicht immer komplett leeren
+            clearPeersView()
+        }
+
+        function onNodeRestarted(kind) {
+            // ebenfalls einmal alles leeren und dann neu laden,
+            // falls dieser Tab aktiv ist und nodeRunning bereits true ist
+            clearPeersView()
+            if (nodeRunning) {
+                refresh()
             }
         }
     }
@@ -632,8 +626,8 @@ Item {
             applyFilter()
             refresh()
         } else {
-            loading = false
-            errorText = ""
+            // wenn der Node komplett aus ist, auch hier sicherheitshalber alles leeren
+            clearPeersView()
         }
     }
 

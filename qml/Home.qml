@@ -538,6 +538,7 @@ Item {
                         Layout.preferredHeight: 360
                         Layout.minimumHeight: 280
                         i18n: homeRoot.i18n
+                        nodeManager: homeRoot.mgr
                     }
 
                     PeerListView {
@@ -545,6 +546,7 @@ Item {
                         Layout.preferredHeight: 360
                         Layout.minimumHeight: 280
                         i18n: homeRoot.i18n
+                        nodeManager: homeRoot.mgr
                     }
                 }
             }

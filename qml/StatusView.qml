@@ -55,6 +55,10 @@ Rectangle {
     // Injected translation helper from Main.qml
     property var i18n: null
 
+    // Reference to GrinNodeManager (optional)
+    // Used to clear the view when the node is stopped or restarted.
+    property var nodeManager: null
+
     // -------------------------------------------------------------------------
     // i18n helper
     // -------------------------------------------------------------------------
@@ -1138,6 +1142,22 @@ Rectangle {
             var m = now.getMinutes().toString().padStart(2, "0")
             var s = now.getSeconds().toString().padStart(2, "0")
             root.lastUpdated = h + ":" + m + ":" + s
+        }
+    }
+    // -------------------------------------------------------------------------
+    // Listen to GrinNodeManager (nodeManager) and clear on stop/restart
+    // -------------------------------------------------------------------------
+    Connections {
+        target: nodeManager
+
+        function onNodeStopped(kind) {
+            currentStatus = null
+            lastUpdated = ""
+        }
+
+        function onNodeRestarted(kind) {
+            currentStatus = null
+            lastUpdated = ""
         }
     }
 }

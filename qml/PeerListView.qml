@@ -20,6 +20,9 @@ Rectangle {
     property var peersModel: []     // array of peer objects from backend
     property string lastUpdated: "" // formatted timestamp of last update
     property var i18n: null         // injected from Main.qml
+    // Reference to GrinNodeManager (optional)
+    // Used to clear the view when the node is stopped or restarted.
+    property var nodeManager: null
 
     // ------------------------------------------------------------------
     // Typography / layout
@@ -258,6 +261,23 @@ Rectangle {
             root.peersModel = peersArray
             var now = new Date()
             root.lastUpdated = now.toLocaleTimeString(Qt.locale(), "hh:mm:ss")
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Listen to GrinNodeManager (nodeManager) and clear on stop/restart
+    // -------------------------------------------------------------------------
+    Connections {
+        target: nodeManager
+
+        function onNodeStopped(kind) {
+            root.peersModel = null
+            lastUpdated = ""
+        }
+
+        function onNodeRestarted(kind) {
+            root.peersModel = null
+            lastUpdated = ""
         }
     }
 }

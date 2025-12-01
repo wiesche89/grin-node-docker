@@ -17,6 +17,9 @@ Item {
     // i18n object from Main.qml (QtObject { id: i18n })
     property var i18n: null
 
+    // Node manager from C++ (GrinNodeManager)
+    property var nodeManager: null
+
     // draw above background image in Main.qml
     z: 1000
 
@@ -32,6 +35,9 @@ Item {
     // Marker list: array of { x, y }
     property var peerMarkers: []
 
+    // Lookup-Tabelle für IPs → wird bei Stop/Restart geleert
+    property var ipList: []
+
     // Small helper for translated strings
     function tr(key, fallback) {
         return i18n ? i18n.t(key) : fallback
@@ -39,7 +45,7 @@ Item {
 
     // -----------------------------------------------------------------
     // Geo lookup: converts IPs to lat/lon (C++ backend)
-// -----------------------------------------------------------------
+    // -----------------------------------------------------------------
     GeoLookup {
         id: geoLookup
 
@@ -66,7 +72,7 @@ Item {
 
     // -----------------------------------------------------------------
     // Main map view (scrollable Flickable)
-// -----------------------------------------------------------------
+    // -----------------------------------------------------------------
     Flickable {
         id: mapView
         anchors.fill: parent
@@ -162,23 +168,46 @@ Item {
         target: nodeOwnerApi
 
         function onConnectedPeersUpdated(peersArray) {
-            var ipList = []
+            // Lookup-Tabelle neu aufbauen
+            peersRoot.ipList = []
+            var tmp = []
+
             for (var i = 0; i < peersArray.length; i++) {
                 var peer = peersArray[i]
                 if (peer.addr && peer.addr.asString) {
                     // Example: "123.45.67.89:13414"
                     var ipOnly = peer.addr.asString.split(":")[0]
-                    if (ipList.indexOf(ipOnly) === -1) {
-                        ipList.push(ipOnly)
+                    if (tmp.indexOf(ipOnly) === -1) {
+                        tmp.push(ipOnly)
                     }
                 }
             }
 
-            if (ipList.length > 0) {
-                geoLookup.lookupIPs(ipList)
+            peersRoot.ipList = tmp
+
+            if (peersRoot.ipList.length > 0) {
+                geoLookup.lookupIPs(peersRoot.ipList)
             } else {
                 peersRoot.peerMarkers = []
             }
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // Listen to GrinNodeManager (nodeManager) and clear on stop/restart
+    // -----------------------------------------------------------------
+    Connections {
+        target: nodeManager
+
+        function onNodeStopped(kind) {
+            peersRoot.ipList = []
+            peersRoot.peerMarkers = []
+        }
+
+
+        function onNodeRestarted(kind) {
+            peersRoot.ipList = []
+            peersRoot.peerMarkers = []
         }
     }
 }

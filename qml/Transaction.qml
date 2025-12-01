@@ -22,6 +22,9 @@ Item {
     // Poll interval for mempool updates (ms)
     property int mempoolPollIntervalMs: 8000
 
+    // Node manager from C++ (GrinNodeManager)
+    property var nodeManager: null
+
     // ------------------------------------------------------------------
     // UI STATE
     // ------------------------------------------------------------------
@@ -34,18 +37,14 @@ Item {
     // Helper: Robust tip mapping from arbitrary payload
     // ------------------------------------------------------------------
     function toTip(obj) {
-        // Accept Q_GADGET (QML value), QVariantMap, plain JS object
         if (!obj)
             return { height: 0, lastBlockPushed: "", prevBlockToLast: "", totalDifficulty: 0 }
 
-        // Direct access if fields are already nice
         var h  = obj.height
         var lb = obj.lastBlockPushed || obj.last_block_pushed || obj.last_block_h
         var pv = obj.prevBlockToLast || obj.prev_block_to_last || obj.prev_block_h
         var td = obj.totalDifficulty  || obj.total_difficulty
 
-        // If Q_GADGET fields are not exposed as properties, fall back to
-        // generic key lookup (case-insensitive).
         function pick(o, keys) {
             for (var i = 0; i < keys.length; ++i) {
                 var k = keys[i]
@@ -107,6 +106,21 @@ Item {
     }
 
     // ------------------------------------------------------------------
+    // Helper: alles leeren (keine alten Artefakte)
+    // ------------------------------------------------------------------
+    function clearTransactionsView() {
+        poolSize = 0
+        stempoolSize = 0
+        tip = { height: 0, lastBlockPushed: "", prevBlockToLast: "", totalDifficulty: 0 }
+        entries = []
+
+        // Statusbar-Text zurücksetzen, falls vorhanden
+        if (status) {
+            status.message = ""
+        }
+    }
+
+    // ------------------------------------------------------------------
     // API: Start/stop mempool polling
     // ------------------------------------------------------------------
     function startMempoolPolling() {
@@ -132,7 +146,12 @@ Item {
 
     Component.onCompleted: updatePollingState()
     onForeignApiChanged: updatePollingState()
-    onNodeRunningChanged: updatePollingState()
+    onNodeRunningChanged: {
+        updatePollingState()
+        if (!nodeRunning) {
+            clearTransactionsView()
+        }
+    }
     Component.onDestruction: stopMempoolPolling()
 
     // ------------------------------------------------------------------
@@ -150,7 +169,6 @@ Item {
             stempoolSize = Number(size || 0)
         }
 
-        // Robust: regardless of how the tip arrives (gadget, map, etc.)
         function onTipUpdated(payload) {
             tip = toTip(payload)
         }
@@ -338,7 +356,6 @@ Item {
     component TipCard: Rectangle {
         id: tipCard
 
-        // incoming data
         property int tipHeight: 0
         property string lastBlockPushed: ""
         property string prevBlockToLast: ""
@@ -346,7 +363,6 @@ Item {
         property bool compactLayout: false
         property var i18n: null
 
-        // layout helpers
         property int layoutBreakpoint: 520
         readonly property bool stackedLayout: compactLayout || width < layoutBreakpoint
         property int contentSpacing: compactLayout ? 10 : 16
@@ -364,7 +380,6 @@ Item {
             spacing: contentSpacing
             flow: Flow.LeftToRight
 
-            // Height column
             ColumnLayout {
                 width: columnWidth
                 Layout.fillHeight: true
@@ -386,7 +401,6 @@ Item {
                 }
             }
 
-            // Hash column
             ColumnLayout {
                 width: columnWidth
                 Layout.fillHeight: true
@@ -437,7 +451,6 @@ Item {
                 }
             }
 
-            // Total difficulty column
             ColumnLayout {
                 width: columnWidth
                 Layout.fillHeight: true
@@ -464,7 +477,6 @@ Item {
             }
         }
 
-        // column width adapts depending on stacked vs. horizontal layout
         property real columnWidth: stackedLayout
             ? Math.max(0, width - 28)
             : Math.max(140, (width - 2 * contentSpacing - 28) / 3)
@@ -474,7 +486,7 @@ Item {
     }
 
     // ------------------------------------------------------------------
-    // InfoChip: small key/value pill
+    // InfoChip
     // ------------------------------------------------------------------
     component InfoChip: Rectangle {
         id: chip
@@ -508,14 +520,14 @@ Item {
     }
 
     // ------------------------------------------------------------------
-    // LegendChip: visual legend entry for colors / category
+    // LegendChip
     // ------------------------------------------------------------------
     component LegendChip: Rectangle {
         id: chipLegend
 
         property string label: ""
         property bool invert: false
-        property string colorMode: "fee"   // "fee" | "src-pool"
+        property string colorMode: "fee"
 
         radius: 12
         implicitHeight: 28
@@ -534,9 +546,8 @@ Item {
                 height: 16
                 radius: 4
                 color: colorMode === "src-pool"
-                       ? "#ffa657"                 // fixed color for pool origin
-                       : (invert ? "#65d365"      // low fee
-                                 : "#ffa657")     // high fee
+                       ? "#ffa657"
+                       : (invert ? "#65d365" : "#ffa657")
                 border.color: "#111"
             }
 
@@ -548,7 +559,7 @@ Item {
     }
 
     // ------------------------------------------------------------------
-    // PoolBlock: one transaction “block” visual
+    // PoolBlock
     // ------------------------------------------------------------------
     component PoolBlock: Rectangle {
         id: block
@@ -567,8 +578,7 @@ Item {
         color: feeColor()
 
         function feeColor() {
-            // Map fee magnitude roughly into an alpha/intensity
-            var f = Math.max(0, Math.min(1, fee / 100000000.0)) // ~= 0..1 GRIN
+            var f = Math.max(0, Math.min(1, fee / 100000000.0))
             var alpha = 0.25 + 0.55 * f
             var r = 0.95 - 0.30 * (1 - f)
             var g = 0.58
@@ -581,7 +591,6 @@ Item {
             anchors.margins: 10
             spacing: 6
 
-            // Header row with short tx id and source chip
             Row {
                 spacing: 6
 
@@ -607,7 +616,6 @@ Item {
                 }
             }
 
-            // Fee + weight
             Row {
                 spacing: 10
 
@@ -636,7 +644,6 @@ Item {
                 }
             }
 
-            // Inputs / outputs / kernels
             Row {
                 spacing: 12
 
@@ -660,7 +667,6 @@ Item {
             }
         }
 
-        // Tooltip with full details
         ToolTip.visible: hover.containsMouse
         ToolTip.delay: 180
         ToolTip.text:
@@ -678,7 +684,7 @@ Item {
     }
 
     // ------------------------------------------------------------------
-    // StatusBar: simple status/info line at the bottom
+    // StatusBar
     // ------------------------------------------------------------------
     component StatusBar: Rectangle {
         id: sb
@@ -729,7 +735,6 @@ Item {
                 Layout.fillWidth: true
             }
 
-            // Close button ("×" is language-neutral)
             Button {
                 text: "\u00D7"
                 onClicked: sb.message = ""
@@ -741,6 +746,23 @@ Item {
             interval: 4000
             running: false
             onTriggered: sb.message = ""
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // Listen to GrinNodeManager (nodeManager) and clear on stop/restart
+    // -----------------------------------------------------------------
+    Connections {
+        target: nodeManager
+
+        function onNodeStopped(kind) {
+            clearTransactionsView()
+            stopMempoolPolling()
+        }
+
+        function onNodeRestarted(kind) {
+            clearTransactionsView()
+            updatePollingState()
         }
     }
 }

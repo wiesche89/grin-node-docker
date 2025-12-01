@@ -264,6 +264,7 @@ ApplicationWindow {
                     Layout.fillHeight: true
 
                     compactLayout: root.compactLayout
+                    nodeManager: grinMgr
                     i18n: i18n
                 }
 
@@ -276,6 +277,7 @@ ApplicationWindow {
 
                     nodeRunning: homePage.nodeRunning
                     compactLayout: root.compactLayout
+                    nodeManager: grinMgr
                     i18n: i18n
                 }
 
@@ -288,6 +290,7 @@ ApplicationWindow {
 
                     nodeRunning: homePage.nodeRunning
                     compactLayout: root.compactLayout
+                    nodeManager: grinMgr
                     i18n: i18n
                 }
 
@@ -300,6 +303,7 @@ ApplicationWindow {
 
                     nodeRunning: homePage.nodeRunning
                     compactLayout: root.compactLayout
+                    nodeManager: grinMgr
                     i18n: i18n
                 }
 
