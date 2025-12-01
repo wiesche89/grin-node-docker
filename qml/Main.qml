@@ -317,6 +317,7 @@ ApplicationWindow {
                     compactLayout: root.compactLayout
                     settingsStore: appSettings
                     nodeManager: grinMgr
+                    nodeRunning: homePage.nodeRunning
                     i18n: i18n
                     rustNodeRunning:  homePage.nodeState === "rust"
                     grinppNodeRunning: homePage.nodeState === "grinpp"

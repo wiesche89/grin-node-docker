@@ -13,14 +13,24 @@ Item {
     property bool rustNodeRunning: false
     property bool grinppNodeRunning: false
 
+    // Wird aus Main.qml gesetzt, z.B. nodeRunning: homePage.nodeRunning
+    property bool nodeRunning: false
+
     // Provided from Main.qml
     property var nodeManager: null
     property var i18n: null
 
+    // Owner API (aus C++ per contextProperty: nodeOwnerApi)
+    readonly property var ownerApi: (typeof nodeOwnerApi === "object" ? nodeOwnerApi : null)
+
     // Local flag: true while a chain-delete request is in progress
     property bool requestInFlight: false
 
-    // Text for success banner after chainDeleted
+    // Flags für validate/compact-Operationen
+    property bool validateInFlight: false
+    property bool compactInFlight: false
+
+    // Text für Success-Banner (wird für alle Aktionen genutzt)
     property string lastDeleteMessage: ""
 
     // --- Default + effective controller URL ---
@@ -173,6 +183,40 @@ Item {
         }
     }
 
+    // -----------------------------------------------------------------------
+    // Listen to NodeOwnerApi (validate / compact)
+    // -----------------------------------------------------------------------
+    Connections {
+        target: ownerApi
+        ignoreUnknownSignals: true
+
+        // Result-Typ ist Result<bool>, in QML behandeln wir das einfach als "fertig"
+        function onValidateChainFinished(result) {
+            console.log("Settings: validateChainFinished", result)
+            validateInFlight = false
+
+            var msg = i18n
+                    ? i18n.t("settings_validate_ok",
+                             "Chain validation requested successfully.\nCheck node logs for progress.")
+                    : "Chain validation requested successfully.\nCheck node logs for progress."
+
+            settingsRoot.lastDeleteMessage = msg
+            deleteSuccessTimer.restart()
+        }
+
+        function onCompactChainFinished(result) {
+            console.log("Settings: compactChainFinished", result)
+            compactInFlight = false
+
+            var msg = i18n
+                    ? i18n.t("settings_compact_ok",
+                             "Chain compaction requested successfully.\nCheck node logs for progress.")
+                    : "Chain compaction requested successfully.\nCheck node logs for progress."
+
+            settingsRoot.lastDeleteMessage = msg
+            deleteSuccessTimer.restart()
+        }
+    }
 
     // -----------------------------------------------------------------------
     // Main ScrollView Content
@@ -377,7 +421,6 @@ Item {
                 }
             }
 
-
             // ================================================================
             // CHAIN DELETE CARD
             // ================================================================
@@ -428,9 +471,7 @@ Item {
                         Layout.fillWidth: true
                         spacing: 12
 
-                        // --------------------------------------------------------
                         // DELETE RUST
-                        // --------------------------------------------------------
                         DarkButton {
                             text: i18n ? i18n.t("settings_chain_delete_rust") : "Delete Rust"
                             Layout.fillWidth: true
@@ -458,9 +499,7 @@ Item {
                             }
                         }
 
-                        // --------------------------------------------------------
                         // DELETE GRIN++
-                        // --------------------------------------------------------
                         DarkButton {
                             text: i18n ? i18n.t("settings_chain_delete_grinpp") : "Delete Grin++"
                             Layout.fillWidth: true
@@ -490,9 +529,7 @@ Item {
                     }
                 }
 
-                // ------------------------------------------------------------
                 // REQUEST-IN-FLIGHT OVERLAY (SPINNER)
-                // ------------------------------------------------------------
                 Rectangle {
                     anchors.fill: parent
                     visible: settingsRoot.requestInFlight
@@ -519,21 +556,240 @@ Item {
                     }
                 }
             }
+
+            // ================================================================
+            // VALIDATE CHAIN CARD
+            // ================================================================
+            Rectangle {
+                id: validateCard
+                Layout.fillWidth: true
+                radius: 8
+                color: "#252525"
+                border.color: "#3a3a3a"
+                border.width: 1
+                Layout.preferredHeight: validateBox.implicitHeight + 32
+
+                ColumnLayout {
+                    id: validateBox
+                    anchors.fill: parent
+                    anchors.margins: 16
+                    spacing: 12
+
+                    Label {
+                        text: i18n ? i18n.t("settings_validate_title") : "Validate chain"
+                        color: "#f0f0f0"
+                        font.pixelSize: compactLayout ? 18 : 20
+                        font.bold: true
+                        Layout.fillWidth: true
+                    }
+
+                    Label {
+                        text: i18n
+                              ? i18n.t("settings_validate_info",
+                                       "Trigger a full chain validation using the owner API.\nThe node must be running.")
+                              : "Trigger a full chain validation using the owner API.\nThe node must be running."
+                        color: "#dddddd"
+                        font.pixelSize: 14
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 12
+
+                        DarkButton {
+                            text: validateInFlight
+                                  ? (i18n ? i18n.t("settings_validate_running", "Validating…")
+                                          : "Validating…")
+                                  : (i18n ? i18n.t("settings_validate_btn", "Validate chain")
+                                          : "Validate chain")
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 46
+                            enabled: ownerApi !== null && nodeRunning && !validateInFlight
+
+                            onClicked: {
+                                if (!ownerApi) {
+                                    deleteErrorOverlay.titleText =
+                                        i18n ? i18n.t("settings_validate_title") : "Validate chain"
+                                    deleteErrorOverlay.messageText =
+                                        i18n ? i18n.t("settings_validate_noapi",
+                                                      "Owner API is not available.")
+                                             : "Owner API is not available."
+                                    deleteErrorOverlay.active = true
+                                    return
+                                }
+                                if (!nodeRunning) {
+                                    deleteErrorOverlay.titleText =
+                                        i18n ? i18n.t("settings_validate_title") : "Validate chain"
+                                    deleteErrorOverlay.messageText =
+                                        i18n ? i18n.t("settings_validate_node_not_running",
+                                                      "No node is running. Start a node before validating the chain.")
+                                             : "No node is running. Start a node before validating the chain."
+                                    deleteErrorOverlay.active = true
+                                    return
+                                }
+
+                                console.log("Settings: validateChainAsync, inFlight = true")
+                                validateInFlight = true
+                                settingsRoot.lastDeleteMessage = ""
+                                // false = keine Abkürzung: volle Validation von RProof/Kernels
+                                ownerApi.validateChainAsync(false)
+                            }
+                        }
+                    }
+                }
+
+                // kleines Overlay beim Laufen
+                Rectangle {
+                    anchors.fill: parent
+                    visible: validateInFlight
+                    color: "#00000040"
+                    z: 50
+
+                    Column {
+                        anchors.centerIn: parent
+                        spacing: 8
+
+                        BusyIndicator {
+                            running: parent.visible
+                            width: 32
+                            height: 32
+                        }
+
+                        Label {
+                            text: i18n
+                                  ? i18n.t("settings_validate_running", "Validating…")
+                                  : "Validating…"
+                            color: "#f0f0f0"
+                            font.pixelSize: 13
+                            horizontalAlignment: Text.AlignHCenter
+                        }
+                    }
+                }
+            }
+
+            // ================================================================
+            // COMPACT CHAIN CARD
+            // ================================================================
+            Rectangle {
+                id: compactCard
+                Layout.fillWidth: true
+                radius: 8
+                color: "#252525"
+                border.color: "#3a3a3a"
+                border.width: 1
+                Layout.preferredHeight: compactBox.implicitHeight + 32
+
+                ColumnLayout {
+                    id: compactBox
+                    anchors.fill: parent
+                    anchors.margins: 16
+                    spacing: 12
+
+                    Label {
+                        text: i18n ? i18n.t("settings_compact_title") : "Compact chain"
+                        color: "#f0f0f0"
+                        font.pixelSize: compactLayout ? 18 : 20
+                        font.bold: true
+                        Layout.fillWidth: true
+                    }
+
+                    Label {
+                        text: i18n
+                              ? i18n.t("settings_compact_info",
+                                       "Trigger a chain compaction (removing old cut-through data).\nThe node must be running.")
+                              : "Trigger a chain compaction (removing old cut-through data).\nThe node must be running."
+                        color: "#dddddd"
+                        font.pixelSize: 14
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 12
+
+                        DarkButton {
+                            text: compactInFlight
+                                  ? (i18n ? i18n.t("settings_compact_running", "Compacting…")
+                                          : "Compacting…")
+                                  : (i18n ? i18n.t("settings_compact_btn", "Compact chain")
+                                          : "Compact chain")
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 46
+                            enabled: ownerApi !== null && nodeRunning && !compactInFlight
+
+                            onClicked: {
+                                if (!ownerApi) {
+                                    deleteErrorOverlay.titleText =
+                                        i18n ? i18n.t("settings_compact_title") : "Compact chain"
+                                    deleteErrorOverlay.messageText =
+                                        i18n ? i18n.t("settings_compact_noapi",
+                                                      "Owner API is not available.")
+                                             : "Owner API is not available."
+                                    deleteErrorOverlay.active = true
+                                    return
+                                }
+                                if (!nodeRunning) {
+                                    deleteErrorOverlay.titleText =
+                                        i18n ? i18n.t("settings_compact_title") : "Compact chain"
+                                    deleteErrorOverlay.messageText =
+                                        i18n ? i18n.t("settings_compact_node_not_running",
+                                                      "No node is running. Start a node before compacting the chain.")
+                                             : "No node is running. Start a node before compacting the chain."
+                                    deleteErrorOverlay.active = true
+                                    return
+                                }
+
+                                console.log("Settings: compactChainAsync, inFlight = true")
+                                compactInFlight = true
+                                settingsRoot.lastDeleteMessage = ""
+                                ownerApi.compactChainAsync()
+                            }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    anchors.fill: parent
+                    visible: compactInFlight
+                    color: "#00000040"
+                    z: 50
+
+                    Column {
+                        anchors.centerIn: parent
+                        spacing: 8
+
+                        BusyIndicator {
+                            running: parent.visible
+                            width: 32
+                            height: 32
+                        }
+
+                        Label {
+                            text: i18n
+                                  ? i18n.t("settings_compact_running", "Compacting…")
+                                  : "Compacting…"
+                            color: "#f0f0f0"
+                            font.pixelSize: 13
+                            horizontalAlignment: Text.AlignHCenter
+                        }
+                    }
+                }
+            }
         }
     }
 
-
     // ================================================================
-    // SUCCESS BANNER (Appears after chainDeleted)
+    // SUCCESS BANNER (Appears after chainDeleted / validate / compact)
     // ================================================================
     Rectangle {
         id: deleteSuccessBanner
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.bottom
         anchors.bottomMargin: 24
-        // Breite explizit setzen, z.B. 40px Rand links/rechts
         width: parent.width - 40
-        // Höhe vom Inhalt ableiten
         height: contentRow.implicitHeight + 24
 
         radius: 6
@@ -571,7 +827,6 @@ Item {
         onTriggered: lastDeleteMessage = ""
     }
 
-
     // ================================================================
     // DARK BUTTON THEME
     // ================================================================
@@ -598,7 +853,7 @@ Item {
     }
 
     // ================================================================
-    // ERROR OVERLAY (already existing)
+    // ERROR OVERLAY
     // ================================================================
     ErrorOverlay {
         id: deleteErrorOverlay
