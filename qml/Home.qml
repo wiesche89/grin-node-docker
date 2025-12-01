@@ -250,7 +250,6 @@ Item {
             // war das sehr wahrscheinlich die Antwort auf unsere Aktion.
             if (homeRoot.requestInFlight) {
                 homeRoot.requestInFlight = false
-                actionTimeoutTimer.stop()
             }
         }
 
@@ -296,21 +295,6 @@ Item {
                 startStatusAndPeersPolling()
             } else {
                 console.log("BootTimer skipped because no node is running")
-            }
-        }
-    }
-
-    // -----------------------------------------------------------------
-    // Fallback-Timeout für Aktionen (Start/Stop/Restart)
-    // -----------------------------------------------------------------
-    Timer {
-        id: actionTimeoutTimer
-        interval: 5000   // 5 Sekunden als Sicherheitsnetz
-        repeat: false
-        onTriggered: {
-            if (homeRoot.requestInFlight) {
-                console.log("Action timeout reached, resetting requestInFlight")
-                homeRoot.requestInFlight = false
             }
         }
     }
@@ -437,7 +421,6 @@ Item {
                                             return
                                         homeRoot.nodeState = "rustStarting"
                                         homeRoot.requestInFlight = true
-                                        actionTimeoutTimer.restart()
                                         mgr.startRust([])
                                     }
                                 }
@@ -452,7 +435,6 @@ Item {
                                              && !homeRoot.requestInFlight
                                     onClicked: {
                                         homeRoot.requestInFlight = true
-                                        actionTimeoutTimer.restart()
                                         mgr.restartRust([])
                                     }
                                 }
@@ -467,7 +449,6 @@ Item {
                                              && !homeRoot.requestInFlight
                                     onClicked: {
                                         homeRoot.requestInFlight = true
-                                        actionTimeoutTimer.restart()
                                         mgr.stopRust()
                                     }
                                 }
@@ -507,7 +488,6 @@ Item {
                                             return
                                         homeRoot.nodeState = "grinppStarting"
                                         homeRoot.requestInFlight = true
-                                        actionTimeoutTimer.restart()
                                         mgr.startGrinPP([])
                                     }
                                 }
@@ -522,7 +502,6 @@ Item {
                                              && !homeRoot.requestInFlight
                                     onClicked: {
                                         homeRoot.requestInFlight = true
-                                        actionTimeoutTimer.restart()
                                         mgr.restartGrinPP([])
                                     }
                                 }
@@ -537,7 +516,6 @@ Item {
                                              && !homeRoot.requestInFlight
                                     onClicked: {
                                         homeRoot.requestInFlight = true
-                                        actionTimeoutTimer.restart()
                                         mgr.stopGrinPP()
                                     }
                                 }
@@ -622,7 +600,6 @@ Item {
             homeRoot.controllerError = false
             controllerErrorOverlay.active = false
             homeRoot.requestInFlight = false
-            actionTimeoutTimer.stop()
         }
 
         function onNodeRestarted(kind) {
@@ -632,14 +609,12 @@ Item {
             homeRoot.controllerError = false
             controllerErrorOverlay.active = false
             homeRoot.requestInFlight = false
-            actionTimeoutTimer.stop()
         }
 
         function onNodeStopped(kind) {
             homeRoot.nodeState = "none"
             stopStatusAndPeersPolling()
             homeRoot.requestInFlight = false
-            actionTimeoutTimer.stop()
         }
 
         function onStatusReceived(statusObj) {
@@ -654,10 +629,10 @@ Item {
                     || homeRoot.nodeState === "grinppStarting")
                 homeRoot.nodeState = "none"
             homeRoot.requestInFlight = false
-            actionTimeoutTimer.stop()
         }
 
         function onLastResponseChanged() {
+            homeRoot.requestInFlight = false
             if (!mgr || !mgr.lastResponse || mgr.lastResponse === "")
                 return
 

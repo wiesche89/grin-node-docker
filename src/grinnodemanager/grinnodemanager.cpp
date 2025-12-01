@@ -180,32 +180,36 @@ void GrinNodeManager::deleteChain(NodeKind kind)
 // eine echte URL zu bauen (ohne den Basis-Pfad zu überschreiben)
 QNetworkRequest GrinNodeManager::makeRequest(const QString &path) const
 {
-    QString rel = path;
+    // <-- Speichere den ORIGINAL-Pfad, unverändert
+    QString apiPath = path;
 
-    // WICHTIG: führenden Slash entfernen, sonst überschreibt
-    // QUrl::resolved() den Pfad der baseUrl statt anzuhängen.
-    if (rel.startsWith('/')) {
+    QString rel = path;
+    if (rel.startsWith('/'))
         rel.remove(0, 1);
-    }
 
     QUrl relUrl;
     relUrl.setPath(rel);
 
     QUrl base = m_baseUrl;
     if (!base.isValid() || base.isEmpty()) {
-        // Fallback: relative URL
-        base = QUrl(QStringLiteral("/"));
+        base = QUrl("/");
     }
 
     QUrl url = base.resolved(relUrl);
 
     QNetworkRequest req(url);
+
+    // EXAKT diesen relativen Pfad speichern – das ist unser Routing-Key
+    req.setAttribute(QNetworkRequest::User, apiPath);
+
     req.setRawHeader("User-Agent", m_opts.userAgent);
-    if (!m_opts.username.isEmpty()) {
+    if (!m_opts.username.isEmpty())
         req.setRawHeader("Authorization", basicAuthHeader());
-    }
+
     return req;
 }
+
+
 
 QByteArray GrinNodeManager::basicAuthHeader() const
 {
@@ -246,11 +250,20 @@ void GrinNodeManager::setBaseUrl(const QUrl &u)
 void GrinNodeManager::onReplyFinished(QNetworkReply *reply)
 {
     int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-    const QUrl url = reply->request().url();
-    const QString path = url.path();
+
+    // Unser eigener „API-Pfad“
+    QString apiPath = reply->request().attribute(QNetworkRequest::User).toString();
+
+
+    // Fallback (nur für Debug), falls aus irgendeinem Grund leer:
+    if (apiPath.isEmpty()) {
+        apiPath = reply->url().path();
+    }
+
     const QByteArray payload = reply->readAll();
 
-    qDebug() << "[GrinNodeManager] Network:" << statusCode << path << payload;
+    qDebug() << "[GrinNodeManager] Network:" << statusCode << apiPath << payload;
+
     auto finish = [&] {
         const QString pretty = safePretty(payload);
         if (pretty != m_lastResponse) {
@@ -260,27 +273,28 @@ void GrinNodeManager::onReplyFinished(QNetworkReply *reply)
     };
 
     if (statusCode != 200) {
-        qDebug() << "[GrinNodeManager] Network error:" << statusCode << path << payload;
-        emit errorOccurred(QString("[%1] %2").arg(url.toString(), reply->errorString()));
+        qDebug() << "[GrinNodeManager] Network error:" << statusCode << apiPath << payload;
+        emit errorOccurred(QString("[%1] %2")
+                               .arg(reply->url().toString(), reply->errorString()));
         finish();
         reply->deleteLater();
         return;
     }
 
-    // Route by endpoint
-    if (path.endsWith("/status")) {
+    // Routing nur noch über apiPath
+    if (apiPath.startsWith("status")) {
         const auto doc = QJsonDocument::fromJson(payload);
         emit statusReceived(doc.object());
-    } else if (path.contains("/logs/")) {
+    } else if (apiPath.startsWith("logs/")) {
         emit logsReceived(QString::fromUtf8(payload));
-    } else if (path.contains("/start/")) {
-        emit nodeStarted(path.contains("rust") ? NodeKind::Rust : NodeKind::GrinPP);
-    } else if (path.contains("/stop/")) {
-        emit nodeStopped(path.contains("rust") ? NodeKind::Rust : NodeKind::GrinPP);
-    } else if (path.contains("/restart/")) {
-        emit nodeRestarted(path.contains("rust") ? NodeKind::Rust : NodeKind::GrinPP);
-    } else if (path.contains("/delete/")) {
-        emit chainDeleted(path.contains("rust") ? NodeKind::Rust : NodeKind::GrinPP);
+    } else if (apiPath.startsWith("start/")) {
+        emit nodeStarted(apiPath.contains("rust") ? NodeKind::Rust : NodeKind::GrinPP);
+    } else if (apiPath.startsWith("stop/")) {
+        emit nodeStopped(apiPath.contains("rust") ? NodeKind::Rust : NodeKind::GrinPP);
+    } else if (apiPath.startsWith("restart/")) {
+        emit nodeRestarted(apiPath.contains("rust") ? NodeKind::Rust : NodeKind::GrinPP);
+    } else if (apiPath.startsWith("delete/")) {
+        emit chainDeleted(apiPath.contains("rust") ? NodeKind::Rust : NodeKind::GrinPP);
     }
 
     finish();

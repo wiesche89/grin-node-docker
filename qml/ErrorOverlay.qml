@@ -101,14 +101,6 @@ Item {
             spacing: 12
 
             Button {
-                text: tr("error_overlay_btn_reconnect", "Reconnect")
-                onClicked: {
-                    root.active = false
-                    root.retry()
-                }
-            }
-
-            Button {
                 text: tr("error_overlay_btn_dismiss", "Dismiss")
                 onClicked: {
                     root.active = false

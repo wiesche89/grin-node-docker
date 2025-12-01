@@ -97,7 +97,6 @@ signals:
     void optionsChanged();
     void errorOccurred(const QString &message);
 
-    // optional: Feedback, wenn Delete erfolgreich war
     void chainDeleted(GrinNodeManager::NodeKind kind);
 
 private slots:
@@ -112,7 +111,6 @@ private:
     void restart(NodeKind kind, const QStringList &args);
     void getLogs(NodeKind kind, int n);
 
-    // NEU: interner Helfer für /delete/<kind>
     void deleteChain(NodeKind kind);
 
     QNetworkRequest makeRequest(const QString &path) const;

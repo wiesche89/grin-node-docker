@@ -3,6 +3,7 @@
 #include <QQmlContext>
 #include <QQuickStyle>
 #include <QIcon>
+#include <QFontDatabase>
 
 #include "grinnodemanager.h"
 #include "nodeforeignapi.h"
@@ -112,6 +113,23 @@ int main(int argc, char *argv[])
     QCoreApplication::setApplicationName("GrinNode");
 
     qputenv("QML_XHR_ALLOW_FILE_READ", "1");
+
+    // -------------------------------------------------------------
+    // CJK-Font global (also wasm)
+    // -------------------------------------------------------------
+    int fontId = QFontDatabase::addApplicationFont(":/res/fonts/NotoSansCJKjp-Regular.otf");
+    if (fontId < 0) {
+        qWarning() << "Failed to load CJK font from resources";
+    } else {
+        QStringList families = QFontDatabase::applicationFontFamilies(fontId);
+        if (!families.isEmpty()) {
+            QFont cjk(families.first());
+            app.setFont(cjk);
+            qDebug() << "Using CJK font family:" << families.first();
+        } else {
+            qWarning() << "No font families found in CJK font";
+        }
+    }
 
 
     // ------------------------------------------------------------------------------------

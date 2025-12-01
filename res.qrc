@@ -25,6 +25,8 @@
         <file>media/grin-node/image_11.jpg</file>
         <file>media/grin-node/image_12.jpg</file>
         <file>media/grin-node/logo.png</file>
+        <file>fonts/NotoSansCJKjp-Regular.otf</file>
+        <file>fonts/NotoSansSC-Regular.otf</file>
     </qresource>
     <qresource prefix="/"/>
 </RCC>

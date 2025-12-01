@@ -14,11 +14,15 @@ COPY ${PREBUILT_DIR}/ ./
 
 # 1) Translations aus dem QML-Ordner mit einpacken
 #    (Pfad ggf. anpassen, wenn dein Ordner anders heißt)
-COPY qml/translation ./qml/translation
+COPY qml/translation ./translation
 
 # 2) Qt-Logo überschreiben
 #    Empfehlung: ein SVG im Repo haben, z.B. media/grin-node/logo.svg
 COPY media/grin-node/logo.svg ./qtlogo.svg
+
+# 3) Fonts mit einpacken
+COPY fonts ./fonts
+
 
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
