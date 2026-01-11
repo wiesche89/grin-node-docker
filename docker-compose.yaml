@@ -3,7 +3,7 @@ version: "3.9"
 services:
   wasm-app:
     build: .
-    image: grin-node-docker:latest
+    image: wiesche89/grin-node-docker:0.2.5
     container_name: grin-node-docker
     restart: unless-stopped
     ports:
