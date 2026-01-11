@@ -147,9 +147,9 @@ int main(int argc, char *argv[])
     }
 
 #ifdef Q_OS_WASM
-    // Im Browser immer über den Reverse Proxy (/api/) gehen
+    // Im Browser immer über den Reverse Proxy (./api/) gehen, damit Umbrel-Apps eigene Pfade nutzen
     if (controllerBase.isEmpty()) {
-        controllerBase = QStringLiteral("/api/");
+        controllerBase = QStringLiteral("./api/");
     }
 #else
     // Desktop-Default: lokaler Controller

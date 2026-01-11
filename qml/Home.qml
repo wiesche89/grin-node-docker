@@ -48,7 +48,7 @@ Item {
     // Controller base URL (used by GrinNodeManager)
     // -----------------------------------------------------------------
     // Controller URL:
-    // - In WASM builds: "/api/" (proxied via nginx)
+    // - In WASM builds: "./api/" (proxied via nginx and stays under the app path)
     // - Otherwise: default "localhost:8080/"
     property url controllerApiUrl: {
         var base = ""
@@ -65,7 +65,7 @@ Item {
 
         if (base === "") {
             if (Qt.platform.os === "wasm" || Qt.platform.os === "wasm-emscripten")
-                base = "/api/"
+                base = "./api/"
             else
                 base = "http://localhost:8080/"
         }

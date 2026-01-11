@@ -41,7 +41,7 @@ Item {
                 return s
         }
         if (Qt.platform.os === "wasm" || Qt.platform.os === "wasm-emscripten")
-            return "/api/"
+            return "./api/"
         return "http://umbrel.local:3416/"
     }
 
