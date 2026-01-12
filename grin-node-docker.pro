@@ -1,4 +1,4 @@
-QT += qml quick gui core charts quickcontrols2
+QT += qml quick gui core charts quickcontrols2 network
 
 CONFIG += c++11
 CONFIG += qml_debug
@@ -7,11 +7,13 @@ INCLUDEPATH += \
     src \
     src/geo \
     src/config \
-    src/grinnodemanager
+    src/grinnodemanager \
+    src/priceanalysis
 
 SOURCES += \
     src/config/config.cpp \
     src/grinnodemanager/grinnodemanager.cpp \
+    src/priceanalysis/priceanalysismanager.cpp \
     src/main.cpp \
     src/geo/geolookup.cpp
 
@@ -22,7 +24,8 @@ wasm {
 HEADERS += \
     src/config/config.h \
     src/geo/geolookup.h \
-    src/grinnodemanager/grinnodemanager.h
+    src/grinnodemanager/grinnodemanager.h \
+    src/priceanalysis/priceanalysismanager.h
 
 
 

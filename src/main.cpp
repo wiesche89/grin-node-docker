@@ -1,4 +1,4 @@
-#include <QGuiApplication>
+#include <QApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickStyle>
@@ -42,6 +42,7 @@
 #include "output.h"
 #include "geolookup.h"
 #include "result.h"
+#include "priceanalysis/priceanalysismanager.h"
 
 /**
  * @brief registerAllMetaTypes
@@ -104,7 +105,7 @@ int main(int argc, char *argv[])
     // ------------------------------------------------------------------------------------
     // Qt-App
     // ------------------------------------------------------------------------------------
-    QGuiApplication app(argc, argv);
+    QApplication app(argc, argv);
     QQuickStyle::setStyle("Fusion");
     app.setWindowIcon(QIcon(":/res/media/grin-node/logo.png"));
 
@@ -173,6 +174,7 @@ int main(int argc, char *argv[])
     // ------------------------------------------------------------------------------------
     NodeOwnerApi *nodeOwnerApi = new NodeOwnerApi(ownerUrl, QString(), &app);
     NodeForeignApi *nodeForeignApi = new NodeForeignApi(foreignUrl, QString());
+    PriceAnalysisManager priceAnalysis;
 
     // ------------------------------------------------------------------------------------
     // QML-Engine
@@ -182,6 +184,7 @@ int main(int argc, char *argv[])
     // Kontext-Properties
     engine.rootContext()->setContextProperty("nodeForeignApi", nodeForeignApi);
     engine.rootContext()->setContextProperty("nodeOwnerApi", nodeOwnerApi);
+    engine.rootContext()->setContextProperty("priceAnalysis", &priceAnalysis);
 
     Config config;
     engine.rootContext()->setContextProperty("config", &config);
