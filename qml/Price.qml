@@ -74,7 +74,8 @@ Item {
                     priceSource && priceSource.loading ? "loading" : "idle")
         priceCandles.clear()
 
-        var desiredCandles = 150
+        var chartWidth = priceChart ? priceChart.width : Math.max(360, priceContent ? priceContent.width : 360)
+        var desiredCandles = Math.max(20, Math.min(120, Math.round(chartWidth / 9)))
         var rawPoints = []
         var minRawTs = Number.MAX_VALUE
         var maxRawTs = 0
@@ -214,7 +215,8 @@ Item {
 
         // only apply padding to the time axis so the Y axis stays tight to the data
         var tsRange = Math.max(1, maxTs - minTs)
-        var tsPad = Math.max(1, tsRange * chartPaddingPct)
+        var minimalPaddingPct = 0.006
+        var tsPad = chartHasData ? Math.max(1, tsRange * minimalPaddingPct) : Math.max(1, tsRange * chartPaddingPct)
         minTs -= tsPad
         maxTs += tsPad
 
@@ -355,6 +357,7 @@ Item {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 360
                             Layout.minimumHeight: 360
+                            onWidthChanged: updateChart()
                             anchors.margins: 10
 
                             antialiasing: true
