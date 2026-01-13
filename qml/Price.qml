@@ -277,6 +277,7 @@ Item {
         }
 
         Item {
+            id: contentItemRoot
             width: priceScroll.width
             implicitHeight: priceContent.implicitHeight + 40
             height: implicitHeight

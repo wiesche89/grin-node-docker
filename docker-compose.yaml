@@ -3,12 +3,13 @@ version: "3.9"
 services:
   wasm-app:
     build: .
-    image: wiesche89/grin-node-docker:0.2.7
+    image: wiesche89/grin-node-docker:0.2.9
     container_name: grin-node-docker
     restart: unless-stopped
     ports:
       - "8083:80"
     environment:
       TZ: "Europe/Berlin"
+      CONTROLLER_PROXY: "host.docker.internal:8080"
     volumes:
       - ./nginx-logs:/var/log/nginx
