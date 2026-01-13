@@ -319,6 +319,7 @@ ApplicationWindow {
                     compactLayout: root.compactLayout
                     priceSource: priceAnalysis
                     i18n: i18n
+                    pageActive: root.currentIndex === 5
                 }
 
                 // -----------------------------------------------------

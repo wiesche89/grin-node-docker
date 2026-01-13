@@ -19,6 +19,11 @@ Item {
     property real chartMaxPrice: 1
     property bool chartHasData: false
     property real candleStickWidthMs: 12 * 60 * 60 * 1000
+    property real dailyHighPrice: NaN
+    property real dailyLowPrice: NaN
+    property real chartPaddingPct: 0.05
+    property real axisLabelFontSize: 11
+    property bool pageActive: false
 
     function tr(key, fallback) {
         if (i18n && typeof i18n.t === "function") {
@@ -31,8 +36,24 @@ Item {
 
     function formatPrice(val) {
         if (typeof val !== "number" || isNaN(val))
-            return tr("price_unknown_value", "n/a")
-        return "$" + val.toFixed(3)
+            return tr("price_unknown_value", "-")
+        return val.toFixed(4) + "$"
+    }
+
+    function formatVolume(val) {
+        if (typeof val !== "number" || isNaN(val))
+            return tr("price_unknown_value", "-")
+        return val.toFixed(2) + "$"
+    }
+
+    function formatLatestUpdate(val) {
+        if (!val)
+            return ""
+        var date = new Date(val)
+        if (isNaN(date.getTime()))
+            return ""
+        var format = compactLayout ? "h:mm" : "MMM d - h:mm"
+        return Qt.formatDateTime(date, format)
     }
 
     function toNumber(value) {
@@ -44,33 +65,6 @@ Item {
         return isFinite(attempt) ? attempt : NaN
     }
 
-    function createDummyCandles(bucketSizeMs) {
-        var template = [
-            {open: 0.03545, high: 0.03585, low: 0.03495, close: 0.03525},
-            {open: 0.03520, high: 0.03560, low: 0.03490, close: 0.03540},
-            {open: 0.03540, high: 0.03590, low: 0.03510, close: 0.03565},
-            {open: 0.03565, high: 0.03605, low: 0.03530, close: 0.03585},
-            {open: 0.03585, high: 0.03610, low: 0.03555, close: 0.03595},
-            {open: 0.03595, high: 0.03620, low: 0.03565, close: 0.03575}
-        ]
-
-        var now = Date.now()
-        var list = []
-        for (var i = 0; i < template.length; ++i) {
-            var idxFromEnd = template.length - 1 - i
-            var ts = now - idxFromEnd * bucketSizeMs
-            var sample = template[i]
-            list.push({
-                timestamp: ts,
-                open: sample.open,
-                high: sample.high,
-                low: sample.low,
-                close: sample.close
-            })
-        }
-        return list
-    }
-
     function updateChart() {
         if (!priceSource || !timeAxis || !valueAxis || !priceCandles)
             return
@@ -79,9 +73,8 @@ Item {
         console.log("priceChart history:", data.length,
                     priceSource && priceSource.loading ? "loading" : "idle")
         priceCandles.clear()
-        priceLine.clear()
 
-        var desiredCandles = 100
+        var desiredCandles = 150
         var rawPoints = []
         var minRawTs = Number.MAX_VALUE
         var maxRawTs = 0
@@ -109,6 +102,22 @@ Item {
 
         var bucketOrigin = minRawTs !== Number.MAX_VALUE ? minRawTs : (Date.now() - fallbackTimespanMs)
         var observedRange = Math.max(maxRawTs - bucketOrigin, fallbackTimespanMs)
+        var dayWindowStart = maxRawTs > 0 ? Math.max(maxRawTs - fallbackTimespanMs, minRawTs) : Date.now() - fallbackTimespanMs
+        var dayHigh = -Number.MAX_VALUE
+        var dayLow = Number.MAX_VALUE
+        for (var idx = 0; idx < rawPoints.length; ++idx) {
+            var pt = rawPoints[idx]
+            if (pt.timestamp >= dayWindowStart) {
+                dayHigh = Math.max(dayHigh, pt.price)
+                dayLow = Math.min(dayLow, pt.price)
+            }
+        }
+        if (dayHigh === -Number.MAX_VALUE)
+            dayHigh = NaN
+        if (dayLow === Number.MAX_VALUE)
+            dayLow = NaN
+        dailyHighPrice = dayHigh
+        dailyLowPrice = dayLow
         var bucketSizeMs = Math.max(1, Math.floor(observedRange / desiredCandles))
         var buckets = {}
         var bucketKeys = []
@@ -146,12 +155,10 @@ Item {
         }
 
         if (candleEntries.length === 0) {
-            console.log("priceChart falling back to dummy candles")
-            candleEntries = createDummyCandles(bucketSizeMs)
+            console.log("priceChart has no API buckets, waiting for data")
         }
 
         priceCandles.clear()
-        priceLine.clear()
         for (var m = 0; m < candleEntries.length; ++m) {
             var candle = candleEntries[m]
             var set = Qt.createQmlObject(
@@ -166,7 +173,6 @@ Item {
                 set.close = candle.close
                 priceCandles.append(set)
             }
-            priceLine.append(candle.timestamp, candle.close)
         }
 
         var minTs = Number.MAX_VALUE
@@ -202,6 +208,16 @@ Item {
             maxPrice = minPrice + adjustment * 2
         }
 
+        var priceRange = Math.max(0.000001, maxPrice - minPrice)
+        minPrice = Math.max(0, minPrice)
+        maxPrice = Math.max(maxPrice, minPrice + priceRange)
+
+        // only apply padding to the time axis so the Y axis stays tight to the data
+        var tsRange = Math.max(1, maxTs - minTs)
+        var tsPad = Math.max(1, tsRange * chartPaddingPct)
+        minTs -= tsPad
+        maxTs += tsPad
+
         chartMinTs = minTs
         chartMaxTs = maxTs
         chartMinPrice = minPrice
@@ -217,12 +233,46 @@ Item {
         }
     }
 
-    ScrollView {
+    Timer {
+        id: refreshTimer
+        interval: 10 * 60 * 1000
+        repeat: true
+        running: false
+        onTriggered: {
+            if (priceSource)
+                priceSource.refresh()
+        }
+    }
+
+    onPageActiveChanged: {
+        if (pageActive) {
+            refreshTimer.restart()
+            if (priceSource)
+                priceSource.refresh()
+        } else {
+            refreshTimer.stop()
+        }
+    }
+
+
+    Flickable {
         id: priceScroll
         anchors.fill: parent
         clip: true
-        ScrollBar.vertical.policy: ScrollBar.AsNeeded
-        ScrollBar.horizontal.policy: ScrollBar.Never
+
+        // vertikal scrollen
+        contentWidth: width
+        contentHeight: contentItemRoot.implicitHeight
+
+        boundsBehavior: Flickable.StopAtBounds
+        flickableDirection: Flickable.VerticalFlick
+
+        // optional: Mausrad (Windows) – smooth
+        WheelHandler {
+            id: wheel
+            target: priceScroll
+            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+        }
 
         Item {
             width: priceScroll.width
@@ -248,12 +298,6 @@ Item {
                     Layout.fillWidth: true
                     spacing: 12
 
-                    Button {
-                        text: tr("headerbar_btn_refresh", "Refresh")
-                        enabled: priceSource !== null
-                        onClicked: priceSource.refresh()
-                    }
-
                     BusyIndicator {
                         running: priceSource ? priceSource.loading : false
                         visible: running
@@ -274,32 +318,65 @@ Item {
                 Rectangle {
                     Layout.fillWidth: true
                     radius: 12
-                    color: "#1f1f1f"
+                    color: "transparent"
                     border.color: "#333"
                     border.width: 1
                     anchors.margins: 16
-                    Layout.preferredHeight: 320
+                    Layout.preferredHeight: 420
+                    clip: true
 
                     ColumnLayout {
                         anchors.fill: parent
                         spacing: 10
 
-                        Label {
-                            text: tr("price_history_title", "Recent price points")
-                            font.pixelSize: 16
-                            color: "#ffffff"
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 12
+
+                            Label {
+                                text: tr("price_chart_symbol", "GRIN-USDT")
+                                color: "#bbbbbb"
+                                font.pixelSize: 14
+                                Layout.leftMargin: 10
+                            }
+
+                            Label {
+                                visible: priceSource && priceSource.latestTimestamp
+                                text: tr("price_latest_update_label", "Latest update:") + " "+formatLatestUpdate(priceSource.latestTimestamp)
+                                color: "#999"
+                                font.pixelSize: 12
+                                Layout.alignment: Qt.AlignRight
+                                Layout.fillWidth: true
+                            }
                         }
 
                         ChartView {
                             id: priceChart
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 260
+                            Layout.preferredHeight: 360
+                            Layout.minimumHeight: 360
                             anchors.margins: 10
+
                             antialiasing: true
                             legend.visible: false
-                            backgroundColor: "#1f1f1fcc"
-                            plotAreaColor: "#111215"
-                            theme: ChartView.ChartThemeDark
+
+                            // Wichtig: KEIN Dark-Theme, das setzt sonst wieder Brushes/Background.
+                            theme: ChartView.ChartThemeLight
+
+                            // QML-Farben (alle transparent)
+                            backgroundColor: "transparent"
+                            plotAreaColor: "transparent"
+
+                            Component.onCompleted: {
+                                // 1) Sichtbarkeit der Hintergründe komplett aus
+                                priceChart.chart.backgroundVisible = false
+                                priceChart.chart.plotAreaBackgroundVisible = false
+
+                                // 2) Zusätzlich: Brushes knallhart transparent setzen (Theme überschreibt gerne Farben)
+                                // (QChart properties in QML)
+                                priceChart.chart.backgroundBrush = Qt.rgba(0, 0, 0, 0)
+                                priceChart.chart.plotAreaBackgroundBrush = Qt.rgba(0, 0, 0, 0)
+                            }
 
                             DateTimeAxis {
                                 id: timeAxis
@@ -307,93 +384,40 @@ Item {
                                 tickCount: 5
                                 min: chartMinTs > 0 ? new Date(chartMinTs) : new Date()
                                 max: chartMaxTs > 0 ? new Date(chartMaxTs) : new Date()
+                                labelsFont.pixelSize: axisLabelFontSize
+                                titleFont.pixelSize: axisLabelFontSize
+
+                                // Lesbar auf deinem Logo-Background
+                                labelsColor: "white"
+                                gridLineColor: "#33ffffff"
                             }
 
                             ValueAxis {
                                 id: valueAxis
-                                labelFormat: "%.2f"
+                                labelFormat: "%.4f"
                                 tickCount: 4
+                                minorTickCount: 0     // <-- killt genau diese kleinen Striche
+                                // optional:
+                                gridVisible: true
+                                minorGridVisible: false
                                 min: chartMinPrice
                                 max: chartMaxPrice
-                            }
+                                labelsFont.pixelSize: axisLabelFontSize
+                                titleFont.pixelSize: axisLabelFontSize
 
+                                labelsColor: "white"
+                                gridLineColor: "#33ffffff"
+                            }
+                            
                             CandlestickSeries {
                                 id: priceCandles
                                 axisX: timeAxis
                                 axisY: valueAxis
-                                increasingColor: "#4ec1ff"
+                                increasingColor: "#4caf50"
                                 decreasingColor: "#ff6f61"
+                                bodyOutlineVisible: true
                                 useOpenGL: false
                                 visible: chartHasData
-                            }
-
-                            LineSeries {
-                                id: priceLine
-                                axisX: timeAxis
-                                axisY: valueAxis
-                                color: "#8cd9ff"
-                                useOpenGL: false
-                                visible: chartHasData
-                            }
-
-                            Rectangle {
-                                anchors.fill: parent
-                                color: "transparent"
-                                visible: !chartHasData && !(priceSource && priceSource.loading)
-
-                                Label {
-                                    anchors.centerIn: parent
-                                    text: tr("price_history_empty", "No data available")
-                                    color: "#888"
-                                    font.pixelSize: 14
-                                }
-                            }
-
-                            Component.onCompleted: updateChart()
-                        }
-
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 6
-
-                            Repeater {
-                                model: priceSource ? priceSource.recentHistory : []
-                                delegate: Rectangle {
-                                    Layout.fillWidth: true
-                                    color: "#121212"
-                                    radius: 6
-                                    border.color: "#333"
-                                    border.width: 1
-                                    anchors.margins: 10
-
-                                    RowLayout {
-                                        Layout.fillWidth: true
-                                        spacing: 12
-
-                                        Label {
-                                            text: model && model.timestamp ? model.timestamp : ""
-                                            color: "#cccccc"
-                                            font.pixelSize: 12
-                                        }
-
-                                        Label {
-                                            text: formatPrice(model.price)
-                                            color: "#ffffff"
-                                            font.pixelSize: 14
-                                            Layout.alignment: Qt.AlignRight
-                                            Layout.fillWidth: true
-                                        }
-                                    }
-                                }
-                            }
-
-                            Label {
-                                visible: !(priceSource && priceSource.recentHistory && priceSource.recentHistory.length)
-                                text: tr("price_history_empty", "No data available")
-                                color: "#999"
-                                font.pixelSize: 14
-                                horizontalAlignment: Text.AlignHCenter
-                                Layout.fillWidth: true
                             }
                         }
                     }
@@ -402,88 +426,97 @@ Item {
                 Rectangle {
                     Layout.fillWidth: true
                     radius: 12
-                    color: "#2a2a2a"
-                    border.color: "#444"
+                    color: "transparent"
+                    border.color: "#333"
                     border.width: 1
-                    anchors.margins: 16
+                    Layout.preferredHeight: grid.implicitHeight + 32   // passt sich an
+                    clip: true
 
-                    ColumnLayout {
+                    // "Padding" innen
+                    Item {
                         anchors.fill: parent
-                        spacing: 6
+                        anchors.margins: 16
 
-                        Label {
-                            text: tr("price_latest_title", "Latest price")
-                            color: "#bbbbbb"
-                            font.pixelSize: 14
-                        }
+                        // responsive Spaltenanzahl
+                        property int columns: width >= 900 ? 4 : (width >= 560 ? 2 : 1)
 
-                        Label {
-                            text: formatPrice(priceSource ? priceSource.latestPriceUsd : NaN)
-                            color: "white"
-                            font.pixelSize: compactLayout ? 34 : 48
-                            font.bold: true
-                        }
-
-                        Label {
-                            text: priceSource ? priceSource.latestTimestamp : ""
-                            color: "#777"
-                            font.pixelSize: 14
-                        }
-                    }
-                }
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 12
-
-                    Rectangle {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 120
-                        radius: 10
-                        color: "#222"
-                        border.color: "#333"
-                        border.width: 1
-                        anchors.margins: 12
-
-                        ColumnLayout {
+                        GridLayout {
+                            id: grid
                             anchors.fill: parent
-                            spacing: 6
-                            Label {
-                                text: tr("price_high_label", "Highest price")
-                                color: "#bbbbbb"
-                                font.pixelSize: 13
-                            }
-                            Label {
-                                text: formatPrice(priceSource ? priceSource.highestPriceUsd : NaN)
-                                color: "#4caf50"
-                                font.pixelSize: 22
-                                font.bold: true
-                            }
-                        }
-                    }
+                            columns: parent.columns
+                            columnSpacing: 16
+                            rowSpacing: 16
 
-                    Rectangle {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 120
-                        radius: 10
-                        color: "#222"
-                        border.color: "#333"
-                        border.width: 1
-                        anchors.margins: 12
+                            // Hilfs-Komponente: eine Kennzahl-Box
+                            component StatBox: Rectangle {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 80
+                                radius: 10
+                                color: "transparent"          // <-- transparent
+                                border.color: "#2a2a2a"
+                                border.width: 1
 
-                        ColumnLayout {
-                            anchors.fill: parent
-                            spacing: 6
-                            Label {
-                                text: tr("price_low_label", "Lowest price")
-                                color: "#bbbbbb"
-                                font.pixelSize: 13
+                                property string title: ""
+                                property string value: ""
+                                property color valueColor: "white"
+                                property int valueSize: 26
+
+                                ColumnLayout {
+                                    anchors.fill: parent
+                                    anchors.margins: 12
+                                    spacing: 6                  // etwas mehr Abstand allgemein
+
+                                    Label {
+                                        text: title
+                                        color: "#bbbbbb"
+                                        font.pixelSize: 12
+                                        elide: Text.ElideRight
+                                        Layout.fillWidth: true
+                                    }
+
+                                    Label {
+                                        text: value
+                                        color: valueColor
+                                        font.pixelSize: valueSize
+                                        font.bold: true
+                                        elide: Text.ElideRight
+                                        Layout.fillWidth: true
+                                    }
+
+                                    // zusätzlicher Raum unter dem Wert
+                                    Item {
+                                        Layout.fillHeight: true
+                                        Layout.preferredHeight: 8
+                                    }
+                                }
                             }
-                            Label {
-                                text: formatPrice(priceSource ? priceSource.lowestPriceUsd : NaN)
-                                color: "#f44336"
-                                font.pixelSize: 22
-                                font.bold: true
+
+                            StatBox {
+                                title: tr("price_latest_title", "Latest price")
+                                value: formatPrice(priceSource ? priceSource.latestPriceUsd : NaN)
+                                valueColor: "white"
+                                valueSize: compactLayout ? 24 : 28
+                            }
+
+                            StatBox {
+                                title: tr("price_volume_label", "Volume (USD)")
+                                value: formatVolume(priceSource ? priceSource.latestVolumeUsd : NaN)
+                                valueColor: "#8cd9ff"
+                                valueSize: compactLayout ? 20 : 24
+                            }
+
+                            StatBox {
+                                title: tr("price_daily_high_label", "Highest daily price")
+                                value: formatPrice(dailyHighPrice)
+                                valueColor: "#4caf50"
+                                valueSize: compactLayout ? 24 : 28
+                            }
+
+                            StatBox {
+                                title: tr("price_daily_low_label", "Lowest daily price")
+                                value: formatPrice(dailyLowPrice)
+                                valueColor: "#f44336"
+                                valueSize: compactLayout ? 24 : 28
                             }
                         }
                     }

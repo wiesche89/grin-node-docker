@@ -7,18 +7,29 @@
 #include <QNetworkRequest>
 #include <QNetworkReply>
 #include <QUrl>
+#include <QUrlQuery>
 #include <QDateTime>
 #include <QtGlobal>
 #include <limits>
 
 namespace {
 static const int kHistoryTailCount = 7;
-static const char kCoinGeckoUrl[] =
-    "https://api.coingecko.com/api/v3/coins/grin/market_chart?vs_currency=usd&days=7";
+
+QVariantMap defaultApiConfig()
+{
+    QVariantMap map;
+    map.insert("baseUrl", QStringLiteral("https://api.coingecko.com/api/v3"));
+    map.insert("endpoint", QStringLiteral("market_chart"));
+    map.insert("coinId", QStringLiteral("grin"));
+    map.insert("vsCurrency", QStringLiteral("usd"));
+    map.insert("days", QStringLiteral("20"));
+    return map;
+}
 }
 
 PriceAnalysisManager::PriceAnalysisManager(QObject *parent)
     : QObject(parent)
+    , m_apiConfig(defaultApiConfig())
 {
     refresh();
 }
@@ -32,10 +43,14 @@ void PriceAnalysisManager::refresh()
     emit loadingChanged();
     setError(QString());
 
-    const QUrl url = QUrl(QLatin1String(kCoinGeckoUrl));
+    const QUrl url = buildRequestUrl();
     QNetworkRequest request(url);
     request.setHeader(QNetworkRequest::UserAgentHeader,
                       QStringLiteral("GrinNodeDashboard/1.0"));
+    QString apiKey = m_apiConfig.value("apiKey").toString();
+    if (!apiKey.isEmpty()) {
+        request.setRawHeader("x-cg-pro-api-key", apiKey.toUtf8());
+    }
 
     QNetworkReply *reply = m_network.get(request);
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
@@ -75,6 +90,7 @@ void PriceAnalysisManager::parseResponse(const QByteArray &data)
     m_lowestPriceUsd = std::numeric_limits<double>::max();
     m_latestPriceUsd = 0.0;
     m_latestTimestamp.clear();
+    m_latestVolumeUsd = 0.0;
 
     for (const QJsonValue &entry : prices) {
         if (!entry.isArray())
@@ -103,6 +119,13 @@ void PriceAnalysisManager::parseResponse(const QByteArray &data)
         QVariantMap latest = m_history.last().toMap();
         m_latestPriceUsd = latest.value("price").toDouble();
         m_latestTimestamp = latest.value("timestamp").toString();
+
+        QJsonArray volumes = root.value("total_volumes").toArray();
+        if (!volumes.isEmpty()) {
+            QJsonArray latestVolumePair = volumes.last().toArray();
+            if (latestVolumePair.size() >= 2)
+                m_latestVolumeUsd = latestVolumePair.at(1).toDouble();
+        }
     } else {
         m_lowestPriceUsd = 0.0;
         setError(tr("price_err_no_data", "No price data available."));
@@ -129,4 +152,59 @@ void PriceAnalysisManager::setError(const QString &message)
 
     m_errorString = message;
     emit errorStringChanged();
+}
+
+QVariantMap PriceAnalysisManager::apiConfig() const
+{
+    return m_apiConfig;
+}
+
+void PriceAnalysisManager::setApiConfig(const QVariantMap &config)
+{
+    QVariantMap next = m_apiConfig;
+    bool changed = false;
+    for (auto it = config.constBegin(); it != config.constEnd(); ++it) {
+        if (!next.contains(it.key()) || next.value(it.key()) != it.value()) {
+            next.insert(it.key(), it.value());
+            changed = true;
+        }
+    }
+
+    if (!changed)
+        return;
+
+    m_apiConfig = next;
+    emit apiConfigChanged();
+}
+
+QUrl PriceAnalysisManager::buildRequestUrl() const
+{
+    QVariantMap cfg = m_apiConfig;
+    QString baseUrl = cfg.value("baseUrl", QStringLiteral("https://api.coingecko.com/api/v3")).toString();
+    QString coinId = cfg.value("coinId", QStringLiteral("grin")).toString();
+    QString endpoint = cfg.value("endpoint", QStringLiteral("market_chart")).toString();
+
+    QUrl url(QUrl::fromUserInput(baseUrl));
+    QString path = url.path();
+    if (!path.endsWith('/'))
+        path += '/';
+    path += QStringLiteral("coins/%1/%2").arg(coinId, endpoint);
+    url.setPath(path);
+
+    QUrlQuery query;
+    QString vsCurrency = cfg.value("vsCurrency", QStringLiteral("usd")).toString();
+    if (!vsCurrency.isEmpty())
+        query.addQueryItem(QStringLiteral("vs_currency"), vsCurrency);
+    QString days = cfg.value("days", QStringLiteral("7")).toString();
+    if (!days.isEmpty())
+        query.addQueryItem(QStringLiteral("days"), days);
+    QString interval = cfg.value("interval").toString();
+    if (!interval.isEmpty())
+        query.addQueryItem(QStringLiteral("interval"), interval);
+    QString precision = cfg.value("precision").toString();
+    if (!precision.isEmpty())
+        query.addQueryItem(QStringLiteral("precision"), precision);
+
+    url.setQuery(query);
+    return url;
 }

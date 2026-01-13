@@ -1,4 +1,4 @@
-ARG PREBUILT_DIR=build/WebAssembly_Qt_6_9_1_single_threaded-Release
+ARG PREBUILT_DIR=build/WebAssembly_Qt_6_10_1_single_threaded-Release
 
 FROM nginx:alpine
 
