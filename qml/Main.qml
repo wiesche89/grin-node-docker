@@ -58,6 +58,7 @@ ApplicationWindow {
         "nav_tx",
         "nav_chain",
         "nav_price",
+        "nav_wallet",
         "nav_settings"
     ]
 
@@ -93,7 +94,8 @@ ApplicationWindow {
         ListElement { titleKey: "nav_tx";       index: 3 }
         ListElement { titleKey: "nav_chain";    index: 4 }
         ListElement { titleKey: "nav_price";    index: 5 }
-        ListElement { titleKey: "nav_settings"; index: 6 }
+        ListElement { titleKey: "nav_wallet";   index: 6 }
+        ListElement { titleKey: "nav_settings"; index: 7 }
     }
 
     // -----------------------------------------------------------------
@@ -320,6 +322,18 @@ ApplicationWindow {
                     priceSource: priceAnalysis
                     i18n: i18n
                     pageActive: root.currentIndex === 5
+                }
+
+                // -----------------------------------------------------
+                // Wallet page - share controller credentials
+                // -----------------------------------------------------
+                Wallet {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+
+                    compactLayout: root.compactLayout
+                    nodeManager: grinMgr
+                    i18n: i18n
                 }
 
                 // -----------------------------------------------------

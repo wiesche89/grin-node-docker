@@ -232,7 +232,7 @@ QHash<QString, QString> Config::parseTomlFlatKeys(const QString &text)
 // Wandelt String -> QVariant anhand des Typs des defaultValue
 QVariant Config::coerceToType(const QString &raw, const QVariant &defaultValue)
 {
-    switch (defaultValue.type()) {
+    switch (defaultValue.metaType().id()) {
     case QMetaType::Bool:
     {
         QString s = raw.trimmed().toLower();

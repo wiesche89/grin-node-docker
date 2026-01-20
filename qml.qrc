@@ -26,6 +26,8 @@
         <file>qml/translation/tr.json</file>
         <file>qml/translation/zh.json</file>
         <file>qml/translation/es.json</file>
+        <file>qml/Wallet.qml</file>
+        <file>qml/QRGen.js</file>
     </qresource>
     <qresource prefix="/"/>
 </RCC>
