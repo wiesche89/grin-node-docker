@@ -18,6 +18,7 @@ import Grin 1.0          // GrinNodeManager
 ApplicationWindow {
     id: root
     visible: true
+    property string umbrelHomeUrl: "http://umbrel.local"
 
     // -----------------------------------------------------------------
     // Window sizing
@@ -168,6 +169,22 @@ ApplicationWindow {
             anchors.margins: 20
             spacing: 15
 
+            SidebarButton {
+                width: parent.width
+                text: "\u2190 Umbrel"
+                onClicked: {
+                    Qt.openUrlExternally(root.umbrelHomeUrl)
+                    sidebarDrawer.close()
+                }
+            }
+
+            Rectangle {
+                width: parent.width
+                height: 1
+                color: "#4a4a4a"
+                opacity: 0.8
+            }
+
             Repeater {
                 model: navigationModel
                 delegate: SidebarButton {
@@ -222,6 +239,18 @@ ApplicationWindow {
                 anchors.margins: 10
                 anchors.topMargin: 80
                 spacing: 15
+
+                SidebarButton {
+                    text: "\u2190 Umbrel"
+                    onClicked: Qt.openUrlExternally(root.umbrelHomeUrl)
+                }
+
+                Rectangle {
+                    width: parent.width
+                    height: 1
+                    color: "#4a4a4a"
+                    opacity: 0.8
+                }
 
                 Repeater {
                     model: navigationModel

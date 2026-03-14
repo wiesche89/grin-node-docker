@@ -15,19 +15,24 @@ Item {
     // Quiet-Zone in QR-Modulen (üblich: 4)
     property int quietZoneModules: 4
 
-    property string defaultIpPort: {
-        if (typeof controllerBaseUrl === "object" && controllerBaseUrl && controllerBaseUrl.host) {
-            var host = controllerBaseUrl.host()
-            if (!host) host = "localhost"
-            var port = controllerBaseUrl.port()
-            if (port === 0 || port === -1)
-                port = (controllerBaseUrl.scheme() === "https" ? 443 : 80)
-            return host + ":" + port
+    property bool testnet: {
+        if (typeof config !== "undefined" && config) {
+            var chainType = String(config.value("chain_type", "")).toLowerCase()
+            if (!chainType.length)
+                chainType = String(config.value("server.chain_type", "")).toLowerCase()
+            if (chainType.indexOf("test") !== -1 || chainType.indexOf("floonet") !== -1)
+                return true
         }
-        return "localhost:3416"
+
+        if (typeof controllerBaseUrl === "object" && controllerBaseUrl && controllerBaseUrl.port)
+            return controllerBaseUrl.port() === 13416
+
+        return false
     }
 
-    property string defaultUsername: nodeManager && nodeManager.username ? nodeManager.username : ""
+    property string defaultIpPort: testnet
+        ? "http://umbrel.local:13416"
+        : "http://umbrel.local:3416"
 
     property string defaultSecret: {
         if (typeof config !== "undefined" && config) {
@@ -43,13 +48,22 @@ Item {
     property string qrPayload: ""
     property bool qrReady: false
 
+    function escapeJsonString(value) {
+        return String(value)
+            .replace(/\\/g, "\\\\")
+            .replace(/"/g, "\\\"")
+            .replace(/\//g, "\\/")
+            .replace(/\n/g, "\\n")
+            .replace(/\r/g, "\\r")
+            .replace(/\t/g, "\\t")
+    }
+
     function walletJson() {
-        var payload = {
-            ipPort: ipPortField ? ipPortField.text.trim() : "",
-            username: usernameField ? usernameField.text : "",
-            secret: secretField ? secretField.text : ""
-        }
-        return JSON.stringify(payload)
+        var ipPort = ipPortField ? ipPortField.text.trim() : ""
+        var secret = secretField ? secretField.text : ""
+        return "{\"ipPort\":\"" + escapeJsonString(ipPort)
+            + "\", \"username\":\"grin\", \"secret\":\""
+            + escapeJsonString(secret) + "\"}"
     }
 
     function rebuildQr() {
@@ -90,14 +104,6 @@ Item {
     }
 
     Component.onCompleted: rebuildQr()
-
-    Connections {
-        target: nodeManager
-        function onOptionsChanged() {
-            if (usernameField && nodeManager)
-                usernameField.text = nodeManager.username || ""
-        }
-    }
 
     ScrollView {
         id: walletScroll
@@ -157,24 +163,8 @@ Item {
                     TextField {
                         id: ipPortField
                         Layout.fillWidth: true
-                        placeholderText: "127.0.0.1:8080"
+                        placeholderText: "http://umbrel.local:3416"
                         text: defaultIpPort
-                        onTextChanged: rebuildQr()
-                    }
-
-                    Label {
-                        text: i18n ? i18n.t("wallet_username_label") : "Username"
-                        color: "#dddddd"
-                        font.pixelSize: 14
-                        font.bold: true
-                        Layout.fillWidth: true
-                    }
-
-                    TextField {
-                        id: usernameField
-                        Layout.fillWidth: true
-                        placeholderText: i18n ? i18n.t("wallet_username_label") : "Username"
-                        text: defaultUsername
                         onTextChanged: rebuildQr()
                     }
 
@@ -278,39 +268,6 @@ Item {
                                     }
                                 }
                             }
-                        }
-                    }
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 12
-
-                        Label {
-                            text: i18n ? i18n.t("wallet_json_label") : "JSON payload"
-                            color: "#bbbbbb"
-                            font.pixelSize: 12
-                        }
-
-                        Item { Layout.fillWidth: true }
-
-                        Button {
-                            text: i18n ? i18n.t("wallet_copy_json") : "Copy JSON"
-                            onClicked: Qt.application.clipboard.setText(qrPayload)
-                        }
-                    }
-
-                    TextArea {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 140
-                        readOnly: true
-                        wrapMode: TextArea.WrapAtWordBoundaryOrAnywhere
-                        text: qrPayload
-                        font.pixelSize: 12
-                        color: "#ffffff"
-                        background: Rectangle {
-                            color: "#1e1e1e"
-                            radius: 6
-                            border.color: "#444"
                         }
                     }
                 }
