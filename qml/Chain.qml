@@ -31,6 +31,13 @@ Item {
 
     // Selection / details
     property int selectedIndex: -1
+    property bool hasUserSelection: false
+    readonly property int chainNodeWidth: 220
+    readonly property int chainConnectorWidth: 48
+    property string blockSearchText: ""
+    property int pendingSearchHeight: -1
+    property bool pendingScrollToLeft: false
+    property bool dummySelected: false
 
     // ---------------------------------------------------
     // i18n helper
@@ -77,10 +84,48 @@ Item {
         var ms = Date.parse(x || "")
         return isNaN(ms) ? 0 : Math.floor(ms / 1000)
     }
+    function copyToClipboard(text) {
+        if (text === undefined || text === null)
+            return
+        if (typeof text === "string")
+            text = text.trim()
+        if (!text)
+            return
+        if (typeof Clipboard !== "undefined" && Clipboard)
+            Clipboard.text = String(text)
+    }
     function headerOf(rb) {
         var h = get(rb,"header",null)
         if (!h) h = get(rb,"block_header",null)
         return h || {}
+    }
+
+    function commitmentHex(value) {
+        if (value === null || value === undefined)
+            return ""
+        if (typeof value === "string")
+            return value
+        if (value.hex !== undefined && value.hex !== null)
+            return String(value.hex)
+        if (value.commitment !== undefined && value.commitment !== null)
+            return String(value.commitment)
+        return String(value)
+    }
+
+    function featureName(value) {
+        if (value === null || value === undefined || value === "")
+            return ""
+        if (typeof value === "number") {
+            if (value === 1)
+                return "Coinbase"
+            return "Plain"
+        }
+        var text = String(value)
+        if (text === "1")
+            return "Coinbase"
+        if (text === "0")
+            return "Plain"
+        return text
     }
 
     // ---------------------------------------------------
@@ -90,13 +135,28 @@ Item {
         var h = headerOf(rb)
         function count(x){ return Array.isArray(x) ? x.length : (x && typeof x.length === "number" ? x.length : 0) }
         return {
+            isDummy: false,
             height: toNum(get(h,"height",0)),
             hash: String(get(h,"hash","")),
             timestamp: toTs(get(h,"timestamp",0)),
-            txs: toNum(get(rb,"num_txs",0)),
+            inputs: count(get(rb,"inputs",[])),
             outputs: count(get(rb,"outputs",[])),
             kernels: count(get(rb,"kernels",[])),
             difficulty: toNum(get(h,"total_difficulty", get(h,"totalDifficulty",0)))
+        }
+    }
+
+    function latestDummyBlock() {
+        return {
+            isDummy: true,
+            rawIndex: -1,
+            height: tip.height > 0 ? (tip.height + 1) : 0,
+            hash: "",
+            timestamp: 0,
+            inputs: 0,
+            outputs: 0,
+            kernels: 0,
+            difficulty: 0
         }
     }
 
@@ -119,16 +179,138 @@ Item {
         for (var i=0;i<arr.length;i++) {
             var it = arr[i]
             if (typeof it === "string") {
-                out.push({ commit: it })
-            } else {
                 out.push({
-                    commit: get(it,"commit",get(it,"commitment","")),
-                    height: toNum(get(it,"height",get(it,"block_height",0))),
-                    spent: !!get(it,"spent",false)
+                    commit: it,
+                    features: "",
+                    height: 0,
+                    spent: false
                 })
+                continue
             }
+            it = it || {}
+            out.push({
+                commit: commitmentHex(get(it,"commit",get(it,"commitment",""))),
+                features: featureName(get(it,"features","")),
+                height: toNum(get(it,"height",get(it,"block_height",0))),
+                spent: !!get(it,"spent",false)
+            })
         }
         return out
+    }
+
+    function findSelectedIndex(rawBlocks, previousRaw) {
+        if (!rawBlocks || rawBlocks.length === 0)
+            return -1
+        if (!previousRaw)
+            return 0
+
+        var previousHeader = headerOf(previousRaw)
+        var previousHash = String(get(previousHeader, "hash", ""))
+        var previousHeight = toNum(get(previousHeader, "height", 0))
+
+        for (var i = 0; i < rawBlocks.length; ++i) {
+            var candidateHeader = headerOf(rawBlocks[i])
+            if (previousHash.length > 0 && String(get(candidateHeader, "hash", "")) === previousHash)
+                return i
+        }
+
+        for (var j = 0; j < rawBlocks.length; ++j) {
+            var header = headerOf(rawBlocks[j])
+            if (toNum(get(header, "height", 0)) === previousHeight)
+                return j
+        }
+
+        return 0
+    }
+
+    function findVisibleBlockIndex(query) {
+        var text = String(query || "").trim().toLowerCase()
+        if (!text)
+            return -1
+
+        var numericHeight = /^[0-9]+$/.test(text) ? Number(text) : -1
+        for (var i = 0; i < root.blocks.length; ++i) {
+            var blk = root.blocks[i]
+            var hash = String(blk.hash || "").toLowerCase()
+            if ((numericHeight >= 0 && blk.height === numericHeight)
+                    || (hash.length > 0 && (hash === text || hash.indexOf(text) === 0))) {
+                return i
+            }
+        }
+        return -1
+    }
+
+    function scrollToVisibleIndex(visibleIndex) {
+        if (visibleIndex < 0)
+            return
+        var itemX = visibleIndex * (chainNodeWidth + chainConnectorWidth)
+        var targetX = Math.max(0, itemX - Math.max(16, Math.floor((flick.width - chainNodeWidth) / 2)))
+        flick.contentX = Math.min(targetX, Math.max(0, flick.contentWidth - flick.width))
+    }
+
+    function loadBlocksAroundHeight(centerHeight) {
+        if (!foreignApi || centerHeight < 0)
+            return
+
+        var halfWindow = Math.floor(lastCount / 2)
+        var start = Math.max(0, centerHeight - halfWindow)
+        var end = start + lastCount - 1
+
+        if (tip.height > 0 && end > tip.height) {
+            end = tip.height
+            start = Math.max(0, end - lastCount + 1)
+        }
+
+        foreignApi.getBlocksAsync(start, end, lastCount, false)
+    }
+
+    function searchBlock() {
+        var query = String(blockSearchText || "").trim()
+        if (!query) {
+            showLatestBlocks()
+            status.show(tr("chain_search_found", "Block selected."))
+            return
+        }
+
+        var visibleIndex = findVisibleBlockIndex(query)
+        if (visibleIndex < 0) {
+            if (/^[0-9]+$/.test(query)) {
+                pendingSearchHeight = Number(query)
+                root.hasUserSelection = true
+                loadBlocksAroundHeight(pendingSearchHeight)
+                status.show(tr("chain_search_loading", "Loading block..."))
+                return
+            }
+
+            if (foreignApi && query.length > 0) {
+                pendingSearchHeight = -1
+                root.hasUserSelection = true
+                foreignApi.getBlockAsync(0, query, "")
+                status.show(tr("chain_search_loading", "Loading block..."))
+                return
+            }
+
+            status.showError(tr("chain_search_not_found", "Block not found in the loaded range."))
+            return
+        }
+
+        root.hasUserSelection = true
+        root.dummySelected = false
+        root.selectedIndex = root.blocks[visibleIndex].rawIndex
+        tabsBar.currentIndex = 0
+        Qt.callLater(function() { scrollToVisibleIndex(visibleIndex) })
+        status.show(tr("chain_search_found", "Block selected."))
+    }
+
+    function showLatestBlocks() {
+        pendingSearchHeight = -1
+        pendingScrollToLeft = true
+        hasUserSelection = false
+        selectedIndex = -1
+        dummySelected = true
+        tabsBar.currentIndex = 0
+        if (tip.height > 0)
+            loadBlocksForTip(tip.height)
     }
 
     function mapOutputsFromRaw(rb) {
@@ -167,7 +349,7 @@ Item {
     // ---------------------------------------------------
     // Derived data from selection
     // ---------------------------------------------------
-    property var selectedRaw: (selectedIndex >= 0 && selectedIndex < blocksRaw.length) ? blocksRaw[selectedIndex] : null
+    property var selectedRaw: (!dummySelected && selectedIndex >= 0 && selectedIndex < blocksRaw.length) ? blocksRaw[selectedIndex] : null
     property var hdrData:     selectedRaw ? mapHeaderFromRaw(selectedRaw)  : null
     property var inputsData:  selectedRaw ? mapInputsFromRaw(selectedRaw)  : []
     property var outputsData: selectedRaw ? mapOutputsFromRaw(selectedRaw) : []
@@ -182,6 +364,8 @@ Item {
         blocksRaw = []
         blocks = []
         selectedIndex = -1
+        hasUserSelection = false
+        dummySelected = false
 
         if (status)
             status.message = ""
@@ -259,7 +443,15 @@ Item {
             }
 
             if (tip.height > 0) {
-                Qt.callLater(function(){ loadBlocksForTip(tip.height) })
+                Qt.callLater(function() {
+                    var selectedHeight = hasUserSelection && selectedRaw
+                            ? toNum(get(headerOf(selectedRaw), "height", 0))
+                            : -1
+                    if (selectedHeight > 0)
+                        loadBlocksAroundHeight(selectedHeight)
+                    else
+                        loadBlocksForTip(tip.height)
+                })
             } else {
                 blocksRaw = []
                 blocks = []
@@ -267,8 +459,11 @@ Item {
             }
         }
 
-        function onBlocksUpdated(list, lastHeight) {
-            blocksRaw = list || []
+        function onBlocksUpdated(blockList, lastRetrievedHeight) {
+            var previousRaw = selectedRaw
+
+            blocksRaw = blockList || []
+            console.log("chain onBlocksUpdated raw length:", blocksRaw.length, "lastHeight:", lastRetrievedHeight)
 
             var simple = []
             for (var i = 0; i < blocksRaw.length; ++i) {
@@ -276,15 +471,62 @@ Item {
                 s.rawIndex = i
                 simple.push(s)
             }
-            simple.sort(function(a,b){ return a.height - b.height })
-            blocks = simple
+            simple.sort(function(a,b){ return b.height - a.height })
+            root.blocks = [latestDummyBlock()].concat(simple)
+            if (root.blocks.length > 0)
+                console.log("chain mapped blocks first/last heights:", root.blocks[0].height, root.blocks[root.blocks.length - 1].height)
+            else
+                console.log("chain mapped blocks empty")
 
-            selectedIndex = (blocksRaw.length > 0) ? (blocksRaw.length - 1) : -1
-
-            // Scroll all the way to the right when new blocks arrive
             Qt.callLater(function() {
-                flick.contentX = Math.max(0, flick.contentWidth - flick.width)
+                if (pendingSearchHeight >= 0) {
+                    var searchedIndex = -1
+                    for (var i = 0; i < root.blocks.length; ++i) {
+                        if (root.blocks[i].height === pendingSearchHeight) {
+                            searchedIndex = i
+                            break
+                        }
+                    }
+
+                    if (searchedIndex >= 0) {
+                        dummySelected = false
+                        selectedIndex = root.blocks[searchedIndex].rawIndex
+                        tabsBar.currentIndex = 0
+                        scrollToVisibleIndex(searchedIndex)
+                        status.show(tr("chain_search_found", "Block selected."))
+                    } else {
+                        selectedIndex = findSelectedIndex(blocksRaw, previousRaw)
+                        status.showError(tr("chain_search_not_found", "Block not found in the loaded range."))
+                    }
+                    pendingSearchHeight = -1
+                } else {
+                    selectedIndex = findSelectedIndex(blocksRaw, previousRaw)
+                }
+                if (pendingScrollToLeft) {
+                    flick.contentX = 0
+                    pendingScrollToLeft = false
+                }
+                console.log("chain selectedIndex after update:", selectedIndex, "hasUserSelection:", hasUserSelection)
+                console.log("chain flick contentX:", flick.contentX, "contentWidth:", flick.contentWidth, "width:", flick.width)
             })
+        }
+
+        function onBlockUpdated(block) {
+            var blockHeight = toNum(get(headerOf(block), "height", 0))
+            if (blockHeight <= 0) {
+                status.showError(tr("chain_search_not_found", "Block not found in the loaded range."))
+                return
+            }
+
+            pendingSearchHeight = blockHeight
+            loadBlocksAroundHeight(blockHeight)
+        }
+
+        function onBlockLookupFailed(message) {
+            pendingSearchHeight = -1
+            status.showError(message && String(message).length > 0
+                             ? String(message)
+                             : tr("chain_search_not_found", "Block not found in the loaded range."))
         }
     }
 
@@ -368,6 +610,24 @@ Item {
             color: "#bbbbbb"
         }
 
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 10
+
+            DarkTextField {
+                Layout.fillWidth: true
+                text: root.blockSearchText
+                placeholderText: tr("chain_search_placeholder", "Search by block height or hash")
+                onTextChanged: root.blockSearchText = text
+                onAccepted: searchBlock()
+            }
+
+            DarkButton {
+                text: tr("chain_search_button", "Search")
+                onClicked: searchBlock()
+            }
+        }
+
         // ----------------------- Chain tiles row -----------------------
         Frame {
             Layout.fillWidth: true
@@ -386,30 +646,40 @@ Item {
                 boundsBehavior: Flickable.StopAtBounds
                 interactive: true
 
-                contentWidth: Math.max(chainRow.implicitWidth, width)
+                contentWidth: Math.max(chainContent.width, width)
                 contentHeight: height
 
-                Row {
-                    id: chainRow
-                    spacing: 0
+                Item {
+                    id: chainContent
+                    width: Array.isArray(root.blocks) && root.blocks.length > 0
+                           ? (root.blocks.length * root.chainNodeWidth)
+                             + ((root.blocks.length - 1) * root.chainConnectorWidth)
+                           : flick.width
                     height: parent.height
 
-                    Repeater {
-                        model: Array.isArray(blocks) ? blocks.length : 0
-                        delegate: ChainNode {
-                            nodeWidth: 220
-                            nodeHeight: 120
-                            connectorWidth: 48
-                            blk: blocks[index]
-                            showConnector: index < (blocks.length - 1)
-                            onClickedBlock: root.selectedIndex = blk.rawIndex
-                        }
-                    }
+                    Row {
+                        id: chainRow
+                        spacing: 0
+                        height: parent.height
 
-                    // Scroll immediately to the right when width changes
-                    onImplicitWidthChanged: {
-                        if (blocks.length > 0) {
-                            flick.contentX = Math.max(0, flick.contentWidth - flick.width)
+                        Repeater {
+                            model: Array.isArray(root.blocks) ? root.blocks.length : 0
+                            delegate: ChainNode {
+                                nodeWidth: root.chainNodeWidth
+                                nodeHeight: 120
+                                connectorWidth: root.chainConnectorWidth
+                                blk: root.blocks[index]
+                                showConnector: index < (root.blocks.length - 1)
+                                onClickedBlock: {
+                                    if (blk.isDummy) {
+                                        showLatestBlocks()
+                                    } else {
+                                        root.hasUserSelection = true
+                                        root.dummySelected = false
+                                        root.selectedIndex = blk.rawIndex
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -480,46 +750,46 @@ Item {
                         Layout.fillHeight: true
                         ScrollView {
                             anchors.fill: parent
+                            contentWidth: width
+                            clip: true
+
                             Column {
-                                anchors.fill: parent
+                                width: parent.width - 20
+                                anchors.left: parent.left
+                                anchors.top: parent.top
                                 anchors.margins: 10
                                 spacing: 6
-                                Label {
-                                    text: hdrData
-                                          ? tr("chain_hdr_hash_prefix", "Hash: ") + (hdrData.hash || "")
-                                          : ""
-                                    color: "#ddd"
+                                DetailField {
+                                    width: parent.width
+                                    label: tr("chain_hdr_hash_prefix", "Hash: ")
+                                    value: hdrData ? (hdrData.hash || "") : ""
                                 }
-                                Label {
-                                    text: hdrData
-                                          ? tr("chain_hdr_prev_prefix", "Previous: ") + (hdrData.previous || "")
-                                          : ""
-                                    color: "#bbb"
+                                DetailField {
+                                    width: parent.width
+                                    label: tr("chain_hdr_prev_prefix", "Previous: ")
+                                    value: hdrData ? (hdrData.previous || "") : ""
                                 }
-                                Label {
-                                    text: hdrData
-                                          ? tr("chain_hdr_total_diff_prefix", "Total difficulty: ") + hdrData.total_difficulty
-                                          : ""
-                                    color: "#bbb"
+                                DetailField {
+                                    width: parent.width
+                                    label: tr("chain_hdr_total_diff_prefix", "Total difficulty: ")
+                                    value: hdrData ? String(hdrData.total_difficulty) : ""
                                 }
-                                Label {
-                                    text: hdrData && hdrData.timestamp
-                                          ? tr("chain_hdr_time_prefix", "Time: ")
-                                            + new Date(hdrData.timestamp*1000).toLocaleString()
-                                          : ""
-                                    color: "#bbb"
+                                DetailField {
+                                    width: parent.width
+                                    label: tr("chain_hdr_time_prefix", "Time: ")
+                                    value: hdrData && hdrData.timestamp
+                                           ? new Date(hdrData.timestamp * 1000).toLocaleString()
+                                           : ""
                                 }
-                                Label {
-                                    text: hdrData && hdrData.kernel_root
-                                          ? tr("chain_hdr_kernel_root_prefix", "Kernel root: ") + hdrData.kernel_root
-                                          : ""
-                                    color: "#bbb"
+                                DetailField {
+                                    width: parent.width
+                                    label: tr("chain_hdr_kernel_root_prefix", "Kernel root: ")
+                                    value: hdrData ? (hdrData.kernel_root || "") : ""
                                 }
-                                Label {
-                                    text: hdrData && hdrData.output_root
-                                          ? tr("chain_hdr_output_root_prefix", "Output root: ") + hdrData.output_root
-                                          : ""
-                                    color: "#bbb"
+                                DetailField {
+                                    width: parent.width
+                                    label: tr("chain_hdr_output_root_prefix", "Output root: ")
+                                    value: hdrData ? (hdrData.output_root || "") : ""
                                 }
                             }
                         }
@@ -572,23 +842,30 @@ Item {
                                                 anchors.margins: 8
                                                 spacing: 4
 
-                                                Label {
-                                                    text: tr("chain_input_commit_prefix", "Commit: ")
-                                                          + (modelData.commit || "")
-                                                    color: "#ddd"
+                                                DetailField {
+                                                    width: parent.width
+                                                    label: tr("chain_input_commit_prefix", "Commit: ")
+                                                    value: modelData.commit || ""
                                                 }
-                                                Label {
+                                                DetailField {
+                                                    visible: !!(modelData.features || "")
+                                                    width: parent.width
+                                                    label: tr("chain_output_type_prefix", "Type: ")
+                                                    value: modelData.features || ""
+                                                }
+                                                DetailField {
                                                     visible: (modelData.height || 0) > 0
-                                                    text: tr("chain_input_height_prefix", "Height: ") + modelData.height
-                                                    color: "#bbb"
+                                                    width: parent.width
+                                                    label: tr("chain_input_height_prefix", "Height: ")
+                                                    value: String(modelData.height)
                                                 }
-                                                Label {
+                                                DetailField {
                                                     visible: modelData.spent !== undefined
-                                                    text: tr("chain_input_spent_prefix", "Spent: ")
-                                                          + (modelData.spent
-                                                             ? tr("common_yes", "yes")
-                                                             : tr("common_no", "no"))
-                                                    color: "#bbb"
+                                                    width: parent.width
+                                                    label: tr("chain_input_spent_prefix", "Spent: ")
+                                                    value: modelData.spent
+                                                           ? tr("common_yes", "yes")
+                                                           : tr("common_no", "no")
                                                 }
                                             }
                                         }
@@ -645,37 +922,37 @@ Item {
                                                 anchors.margins: 8
                                                 spacing: 4
 
-                                                Label {
-                                                    text: tr("chain_output_type_prefix", "Type: ")
-                                                          + get(modelData, "output_type", "")
-                                                    color: "#bbb"
+                                                DetailField {
+                                                    width: parent.width
+                                                    label: tr("chain_output_type_prefix", "Type: ")
+                                                    value: get(modelData, "output_type", "")
                                                 }
 
-                                                Label {
-                                                    text: tr("chain_output_height_prefix", "Height: ")
-                                                          + get(modelData, "height", "")
-                                                    color: "#bbb"
+                                                DetailField {
+                                                    width: parent.width
+                                                    label: tr("chain_output_height_prefix", "Height: ")
+                                                    value: String(get(modelData, "height", ""))
                                                 }
 
-                                                Label {
-                                                    text: tr("chain_output_mmr_index_prefix", "MMR index: ")
-                                                          + get(modelData, "mmr_index", "")
-                                                    color: "#bbb"
+                                                DetailField {
+                                                    width: parent.width
+                                                    label: tr("chain_output_mmr_index_prefix", "MMR index: ")
+                                                    value: String(get(modelData, "mmr_index", ""))
                                                 }
 
-                                                Label {
-                                                    text: tr("chain_output_spent_prefix", "Spent: ")
-                                                          + (get(modelData, "spent", false)
-                                                             ? tr("common_yes", "yes")
-                                                             : tr("common_no", "no"))
-                                                    color: "#bbb"
+                                                DetailField {
+                                                    width: parent.width
+                                                    label: tr("chain_output_spent_prefix", "Spent: ")
+                                                    value: get(modelData, "spent", false)
+                                                           ? tr("common_yes", "yes")
+                                                           : tr("common_no", "no")
                                                 }
 
-                                                Label {
+                                                DetailField {
                                                     visible: !!get(modelData, "proof_hash", "")
-                                                    text: tr("chain_output_proof_hash_prefix", "Proof hash: ")
-                                                          + get(modelData, "proof_hash", "")
-                                                    color: "#777"
+                                                    width: parent.width
+                                                    label: tr("chain_output_proof_hash_prefix", "Proof hash: ")
+                                                    value: get(modelData, "proof_hash", "")
                                                 }
                                             }
                                         }
@@ -732,32 +1009,30 @@ Item {
                                                 anchors.margins: 8
                                                 spacing: 4
 
-                                                Label {
-                                                    text: tr("chain_kernel_features_prefix", "Features: ")
-                                                          + (modelData.features || "")
-                                                    color: "#ddd"
+                                                DetailField {
+                                                    width: parent.width
+                                                    label: tr("chain_kernel_features_prefix", "Features: ")
+                                                    value: modelData.features || ""
                                                 }
-                                                Label {
-                                                    text: tr("chain_kernel_fee_prefix", "Fee: ")
-                                                          + modelData.fee
-                                                    color: "#bbb"
+                                                DetailField {
+                                                    width: parent.width
+                                                    label: tr("chain_kernel_fee_prefix", "Fee: ")
+                                                    value: String(modelData.fee)
                                                 }
-                                                Label {
-                                                    text: tr("chain_kernel_lock_height_prefix", "Lock height: ")
-                                                          + modelData.lock_height
-                                                    color: "#bbb"
+                                                DetailField {
+                                                    width: parent.width
+                                                    label: tr("chain_kernel_lock_height_prefix", "Lock height: ")
+                                                    value: String(modelData.lock_height)
                                                 }
-                                                Label {
-                                                    text: tr("chain_kernel_excess_prefix", "Excess: ")
-                                                          + (modelData.excess || "")
-                                                    color: "#bbb"
-                                                    wrapMode: Text.WrapAnywhere
+                                                DetailField {
+                                                    width: parent.width
+                                                    label: tr("chain_kernel_excess_prefix", "Excess: ")
+                                                    value: modelData.excess || ""
                                                 }
-                                                Label {
-                                                    text: tr("chain_kernel_excess_sig_prefix", "Excess sig: ")
-                                                          + (modelData.excess_sig || "")
-                                                    color: "#777"
-                                                    wrapMode: Text.WrapAnywhere
+                                                DetailField {
+                                                    width: parent.width
+                                                    label: tr("chain_kernel_excess_sig_prefix", "Excess sig: ")
+                                                    value: modelData.excess_sig || ""
                                                 }
                                             }
                                         }
@@ -856,6 +1131,48 @@ Item {
         font.pixelSize: 14
     }
 
+    component DetailField: Rectangle {
+        id: detailField
+        property string label: ""
+        property string value: ""
+
+        width: parent ? parent.width : implicitWidth
+        color: "#1a1a1a"
+        border.color: "#2a2a2a"
+        border.width: 1
+        radius: 8
+        implicitHeight: fieldColumn.implicitHeight + 12
+
+        ColumnLayout {
+            id: fieldColumn
+            anchors.fill: parent
+            anchors.margins: 6
+            spacing: 4
+
+            Label {
+                Layout.fillWidth: true
+                text: detailField.label
+                color: "#bbb"
+                font.bold: true
+                elide: Text.ElideRight
+            }
+
+            TextArea {
+                Layout.fillWidth: true
+                readOnly: true
+                text: detailField.value ? String(detailField.value) : ""
+                selectByMouse: true
+                wrapMode: TextEdit.WrapAnywhere
+                color: "#ddd"
+                background: Rectangle {
+                    color: "#141414"
+                    radius: 6
+                    border.color: "#222"
+                }
+            }
+        }
+    }
+
     component ChainNode: Item {
         property var blk
         property bool showConnector: true
@@ -916,8 +1233,10 @@ Item {
         signal clicked()
 
         radius: 12
-        border.color: "#2a2a2a"
-        color: (blk && (blk.height % 2) === 0) ? "#171a20" : "#1b1f27"
+        border.color: blk && blk.isDummy ? "#3f8f62" : "#2a2a2a"
+        color: blk && blk.isDummy
+               ? Qt.rgba(0.26, 0.56, 0.36, 0.28)
+               : ((blk && (blk.height % 2) === 0) ? "#171a20" : "#1b1f27")
 
         Column {
             anchors.fill: parent
@@ -927,8 +1246,10 @@ Item {
             Row {
                 spacing: 8
                 Label {
-                    text: "#" + (blk ? blk.height : "")
-                    color: "white"
+                    text: blk && blk.isDummy
+                          ? "+"
+                          : ("#" + (blk ? blk.height : ""))
+                    color: blk && blk.isDummy ? "#d9ffd8" : "white"
                     font.bold: true
                 }
                 Rectangle {
@@ -938,28 +1259,37 @@ Item {
                     color: "#7aa2ff"
                 }
                 Label {
-                    text: (blk && blk.hash) ? blk.hash.substr(0,10) : ""
-                    color: "#cfcfcf"
+                    text: blk && blk.isDummy
+                          ? tr("chain_dummy_title", "Next block")
+                          : ((blk && blk.hash) ? blk.hash.substr(0,10) : "")
+                    color: blk && blk.isDummy ? "#c8f5cf" : "#cfcfcf"
                     font.pixelSize: 12
                     elide: Text.ElideRight
                 }
             }
 
             Label {
-                text: blk
-                      ? (tr("chain_tile_stats", "Tx:%1  Out:%2  Ker:%3")
-                         .replace("%1", blk.txs)
+                text: blk && blk.isDummy
+                      ? tr("chain_dummy_info", "Click to return to latest blocks")
+                      : (blk
+                      ? (tr("chain_tile_stats", "In:%1  Out:%2  Ker:%3")
+                         .replace("%1", blk.inputs)
                          .replace("%2", blk.outputs)
                          .replace("%3", blk.kernels))
                       : ""
+)
                 color: "#dddddd"
                 font.pixelSize: 12
+                wrapMode: Text.WordWrap
             }
 
             Label {
-                text: (blk && blk.timestamp)
+                text: blk && blk.isDummy
+                      ? tr("chain_dummy_height", "Builds on #%1").replace("%1", Math.max(0, tip.height))
+                      : ((blk && blk.timestamp)
                       ? new Date(blk.timestamp*1000).toLocaleTimeString()
                       : ""
+)
                 color: "#aaaaaa"
                 font.pixelSize: 11
             }

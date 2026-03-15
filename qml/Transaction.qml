@@ -608,7 +608,9 @@ Item {
                     }
 
                     Label {
-                        text: i18n ? i18n.t("tx_history_limit").arg(historyLimit) : ("Last " + historyLimit)
+                        text: i18n
+                              ? String(i18n.t("tx_history_limit")).replace("%1", historyLimit)
+                              : ("Last " + historyLimit)
                         color: "#9a9a9a"
                         font.pixelSize: 12
                     }
@@ -681,11 +683,11 @@ Item {
 
                             Label {
                                 Layout.fillWidth: true
-                                text: (i18n ? i18n.t("tx_history_stats") : "Fee %1 | I/O/K %2/%3/%4")
-                                      .arg(historyEntries[index].fee)
-                                      .arg(historyEntries[index].inputs)
-                                      .arg(historyEntries[index].outputs)
-                                      .arg(historyEntries[index].kernels)
+                                text: String(i18n ? i18n.t("tx_history_stats") : "Fee %1 | I/O/K %2/%3/%4")
+                                      .replace("%1", historyEntries[index].fee)
+                                      .replace("%2", historyEntries[index].inputs)
+                                      .replace("%3", historyEntries[index].outputs)
+                                      .replace("%4", historyEntries[index].kernels)
                                 color: "#d0d0d0"
                                 font.pixelSize: 12
                                 wrapMode: Text.WordWrap
@@ -785,27 +787,6 @@ Item {
                                     color: "white"
                                     font.bold: true
                                     Layout.fillWidth: true
-                                }
-
-                                Button {
-                                    text: i18n ? i18n.t("tx_details_copy") : "Copy"
-                                    flat: true
-                                    onClicked: copyToClipboard(modelData.value)
-
-                                    background: Rectangle {
-                                        radius: 6
-                                        color: parent.down ? "#2f2f2f" : (parent.hovered ? "#3a3a3a" : "#242424")
-                                        border.color: "#555"
-                                        border.width: 1
-                                    }
-
-                                    contentItem: Text {
-                                        text: parent.text
-                                        color: "white"
-                                        font.pixelSize: 12
-                                        horizontalAlignment: Text.AlignHCenter
-                                        verticalAlignment: Text.AlignVCenter
-                                    }
                                 }
                             }
 

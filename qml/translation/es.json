@@ -167,7 +167,16 @@
   "chain_kernel_excess_sig_prefix": "Firma de exceso: ",
 
   "chain_loading_tip": "Cargando punta...",
-  "chain_tile_stats": "Tx:%1  Sal:%2  Ker:%3",
+  "chain_tile_stats": "Ent:%1  Sal:%2  Ker:%3",
+  "chain_search_placeholder": "Buscar por altura de bloque o hash",
+  "chain_search_button": "Buscar",
+  "chain_search_loading": "Cargando bloque...",
+  "chain_search_not_found": "Bloque no encontrado en el rango cargado.",
+  "chain_search_found": "Bloque seleccionado.",
+  "chain_copy": "Copiar",
+  "chain_dummy_title": "Nuevo bloque",
+  "chain_dummy_info": "Haz clic para volver a los bloques más recientes",
+  "chain_dummy_height": "Se construye sobre #%1",
 
   "chain_err_foreign_api": "API externa no configurada.",
   "chain_err_get_tip": "getTipAsync falló: %1",
