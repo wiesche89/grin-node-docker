@@ -219,6 +219,9 @@
   "peerlist_col_version": "Versión",
   "peerlist_col_capabilities": "Capacidades",
 
+  "peerlist_col_details": "Detalles",
+  "peerlist_btn_details": "Detalles",
+  "peerlist_details_title": "Detalles del peer",
   "status_title": "Estado del nodo",
   "status_last_update_prefix": "Última actualización: ",
 

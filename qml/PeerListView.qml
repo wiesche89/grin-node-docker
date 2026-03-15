@@ -36,18 +36,20 @@ Rectangle {
 
     // Logical column widths (do not depend on actual window size)
     readonly property int uaColumnWidth:          170
+    readonly property int directionColumnWidth:   100
     readonly property int heightColumnWidth:      90
     readonly property int addrColumnWidth:        220
     readonly property int versionColumnWidth:     90
-    readonly property int capabilitiesColumnWidth:220
+    readonly property int detailsColumnWidth:     100
 
     readonly property int totalLogicalWidth:
         uaColumnWidth
+        + directionColumnWidth
         + heightColumnWidth
         + addrColumnWidth
         + versionColumnWidth
-        + capabilitiesColumnWidth
-        + (4 * columnSpacing)
+        + detailsColumnWidth
+        + (5 * columnSpacing)
         + (2 * headerPadding)
 
     // ------------------------------------------------------------------
@@ -59,6 +61,10 @@ Rectangle {
 
         var _ = i18n.language
         return i18n.t(key)
+    }
+
+    function fieldText(labelKey, fallbackLabel, value) {
+        return tr(labelKey, fallbackLabel) + ": " + value
     }
 
 
@@ -85,7 +91,9 @@ Rectangle {
                 color: "white"
             }
 
-            Item { Layout.fillWidth: true }
+            Item {
+                Layout.fillWidth: true
+            }
 
             Label {
                 text: lastUpdated !== ""
@@ -93,6 +101,7 @@ Rectangle {
                       : ""
                 font.pixelSize: dataFontSize
                 color: "#aaaaaa"
+                Layout.alignment: Qt.AlignRight
             }
         }
 
@@ -149,6 +158,15 @@ Rectangle {
                             font.pixelSize: dataFontSize
                             width: uaColumnWidth
                             elide: Text.ElideRight
+                            horizontalAlignment: Text.AlignHCenter
+                        }
+                        Label {
+                            text: tr("peers_direction", "Direction")
+                            color: "white"
+                            font.bold: true
+                            font.pixelSize: dataFontSize
+                            width: directionColumnWidth
+                            horizontalAlignment: Text.AlignHCenter
                         }
                         Label {
                             text: tr("peerlist_col_height", "Height")
@@ -165,6 +183,7 @@ Rectangle {
                             font.pixelSize: dataFontSize
                             width: addrColumnWidth
                             elide: Text.ElideRight
+                            horizontalAlignment: Text.AlignHCenter
                         }
                         Label {
                             text: tr("peerlist_col_version", "Version")
@@ -175,12 +194,12 @@ Rectangle {
                             horizontalAlignment: Text.AlignHCenter
                         }
                         Label {
-                            text: tr("peerlist_col_capabilities", "Capabilities")
+                            text: tr("peerlist_col_details", "Details")
                             color: "white"
                             font.bold: true
                             font.pixelSize: dataFontSize
-                            width: capabilitiesColumnWidth
-                            elide: Text.ElideRight
+                            width: detailsColumnWidth
+                            horizontalAlignment: Text.AlignHCenter
                         }
                     }
                 }
@@ -204,8 +223,9 @@ Rectangle {
                         color: index % 2 === 0 ? "#3a3a3a" : "#333333"
 
                         Row {
-                            anchors.fill: parent
-                            anchors.margins: headerPadding
+                            anchors.verticalCenter: parent.verticalCenter
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            width: parent.width - (2 * headerPadding)
                             spacing: columnSpacing
 
                             Label {
@@ -214,6 +234,16 @@ Rectangle {
                                 font.pixelSize: dataFontSize
                                 width: uaColumnWidth
                                 elide: Text.ElideRight
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                            Label {
+                                text: modelData.direction.asString
+                                color: "#cccccc"
+                                font.pixelSize: dataFontSize
+                                width: directionColumnWidth
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
                             }
                             Label {
                                 text: modelData.height
@@ -221,6 +251,7 @@ Rectangle {
                                 font.pixelSize: dataFontSize
                                 width: heightColumnWidth
                                 horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
                             }
                             Label {
                                 text: modelData.addr.asString
@@ -228,6 +259,8 @@ Rectangle {
                                 font.pixelSize: dataFontSize
                                 width: addrColumnWidth
                                 elide: Text.ElideRight
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
                             }
                             Label {
                                 text: modelData.version.asString
@@ -235,17 +268,99 @@ Rectangle {
                                 font.pixelSize: dataFontSize
                                 width: versionColumnWidth
                                 horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
                             }
-                            Label {
-                                text: modelData.capabilities.asString
-                                color: "#cccccc"
-                                font.pixelSize: dataFontSize
-                                width: capabilitiesColumnWidth
-                                elide: Text.ElideRight
+                            Button {
+                                text: tr("peerlist_btn_details", "Details")
+                                width: detailsColumnWidth
+                                height: 26
+                                onClicked: {
+                                    peerDetailsDialog.selectedPeer = modelData
+                                    peerDetailsDialog.open()
+                                }
                             }
                         }
                     }
                 }
+            }
+        }
+    }
+
+    Dialog {
+        id: peerDetailsDialog
+        property var selectedPeer: null
+
+        modal: true
+        anchors.centerIn: Overlay.overlay
+        width: Math.min(root.width - 32, 560)
+        padding: 16
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+        background: Rectangle {
+            radius: 8
+            color: "#2b2b2b"
+            border.color: "#555"
+            border.width: 1
+        }
+
+        header: Label {
+            text: tr("peerlist_details_title", "Peer Details")
+            color: "white"
+            font.bold: true
+            font.pixelSize: headingFontSize
+            padding: 16
+        }
+
+        contentItem: ColumnLayout {
+            spacing: 10
+
+            Label {
+                Layout.fillWidth: true
+                text: peerDetailsDialog.selectedPeer ? fieldText("peerlist_col_addr", "Addr", peerDetailsDialog.selectedPeer.addr.asString) : ""
+                color: "white"
+                wrapMode: Text.WrapAnywhere
+            }
+
+            Label {
+                Layout.fillWidth: true
+                text: peerDetailsDialog.selectedPeer ? fieldText("peers_direction", "Direction", peerDetailsDialog.selectedPeer.direction.asString) : ""
+                color: "#cccccc"
+                wrapMode: Text.Wrap
+            }
+
+            Label {
+                Layout.fillWidth: true
+                text: peerDetailsDialog.selectedPeer ? fieldText("peerlist_col_useragent", "UserAgent", peerDetailsDialog.selectedPeer.userAgent) : ""
+                color: "#cccccc"
+                wrapMode: Text.Wrap
+            }
+
+            Label {
+                Layout.fillWidth: true
+                text: peerDetailsDialog.selectedPeer ? fieldText("peerlist_col_height", "Height", peerDetailsDialog.selectedPeer.height) : ""
+                color: "#cccccc"
+                wrapMode: Text.Wrap
+            }
+
+            Label {
+                Layout.fillWidth: true
+                text: peerDetailsDialog.selectedPeer ? fieldText("peerlist_col_version", "Version", peerDetailsDialog.selectedPeer.version.asString) : ""
+                color: "#cccccc"
+                wrapMode: Text.Wrap
+            }
+
+            Label {
+                Layout.fillWidth: true
+                text: peerDetailsDialog.selectedPeer ? fieldText("peerlist_col_capabilities", "Capabilities", peerDetailsDialog.selectedPeer.capabilities.asString) : ""
+                color: "#cccccc"
+                wrapMode: Text.Wrap
+            }
+        }
+
+        footer: DialogButtonBox {
+            Button {
+                text: tr("app_close", "Close")
+                onClicked: peerDetailsDialog.close()
             }
         }
     }
