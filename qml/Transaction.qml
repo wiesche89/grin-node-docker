@@ -24,6 +24,7 @@ Item {
 
     // Node manager from C++ (GrinNodeManager)
     property var nodeManager: null
+    property var settingsStore: null
 
     // ------------------------------------------------------------------
     // UI STATE
@@ -32,6 +33,9 @@ Item {
     property int stempoolSize: 0
     property var tip: ({ height: 0, lastBlockPushed: "", prevBlockToLast: "", totalDifficulty: 0 })
     property var entries: []   // only pool transactions
+    property var historyEntries: []
+    property int historyLimit: 50
+    property var selectedTransaction: null
 
     // ------------------------------------------------------------------
     // Helper: Robust tip mapping from arbitrary payload
@@ -76,6 +80,139 @@ Item {
     // ------------------------------------------------------------------
     // Helper: Map raw pool entries to a flat model
     // ------------------------------------------------------------------
+    function stableHash(text) {
+        var hash = 2166136261
+        var input = String(text || "")
+        for (var i = 0; i < input.length; ++i) {
+            hash ^= input.charCodeAt(i)
+            hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24)
+        }
+        return (hash >>> 0).toString(16)
+    }
+
+    function normalizeSource(value) {
+        if (value === undefined || value === null || value === "")
+            return ""
+
+        if (typeof value === "number") {
+            switch (value) {
+            case 0: return "PushApi"
+            case 1: return "Broadcast"
+            case 2: return "Fluff"
+            case 3: return "EmbargoExpired"
+            case 4: return "Deaggregate"
+            default: return String(value)
+            }
+        }
+
+        var text = String(value)
+        if (text === "0") return "PushApi"
+        if (text === "1") return "Broadcast"
+        if (text === "2") return "Fluff"
+        if (text === "3") return "EmbargoExpired"
+        if (text === "4") return "Deaggregate"
+        return text
+    }
+
+    function deriveTransactionId(entry, tx, body, fallbackIndex) {
+        var directId = entry.id || entry.tx_id || tx.txId || tx.tx_id || tx.id
+        if (directId !== undefined && directId !== null && String(directId).length > 0)
+            return String(directId)
+
+        if (body && body.kernels && body.kernels.length > 0) {
+            var firstKernel = body.kernels[0]
+            if (firstKernel && firstKernel.excess && String(firstKernel.excess).length > 0)
+                return String(firstKernel.excess)
+        }
+
+        var txAt = entry.txAt || entry.tx_at || ""
+        var source = normalizeSource(entry.src)
+        var fee = tx.fee || entry.fee || 0
+            var kernelData = body && body.kernels ? JSON.stringify(body.kernels) : ""
+            var outputData = body && body.outputs ? JSON.stringify(body.outputs) : ""
+            var inputData = body && body.inputs ? JSON.stringify(body.inputs) : ""
+            var fingerprint = JSON.stringify(tx)
+
+        if (!fingerprint || fingerprint === "{}") {
+            fingerprint = [
+                txAt,
+                source,
+                fee,
+                inputData,
+                outputData,
+                kernelData,
+                fallbackIndex
+            ].join("|")
+        }
+
+        return "tx-" + stableHash(fingerprint)
+    }
+
+    function totalKernelFee(body) {
+        if (!body || !body.kernels || body.kernels.length === 0)
+            return 0
+
+        var total = 0
+        for (var i = 0; i < body.kernels.length; ++i) {
+            var kernel = body.kernels[i]
+            var fee = Number(kernel && kernel.fee !== undefined ? kernel.fee : 0)
+            total += fee
+        }
+        return total
+    }
+
+    function kernelExcesses(body) {
+        var out = []
+        if (!body || !body.kernels)
+            return out
+        for (var i = 0; i < body.kernels.length; ++i) {
+            var kernel = body.kernels[i]
+            if (kernel && kernel.excess)
+                out.push(String(kernel.excess))
+        }
+        return out
+    }
+
+    function kernelSignatures(body) {
+        var out = []
+        if (!body || !body.kernels)
+            return out
+        for (var i = 0; i < body.kernels.length; ++i) {
+            var kernel = body.kernels[i]
+            if (kernel && kernel.excessSig)
+                out.push(String(kernel.excessSig))
+        }
+        return out
+    }
+
+    function kernelFeatureNames(body) {
+        var out = []
+        if (!body || !body.kernels)
+            return out
+        for (var i = 0; i < body.kernels.length; ++i) {
+            var kernel = body.kernels[i]
+            if (kernel && kernel.features)
+                out.push(String(kernel.features))
+        }
+        return out
+    }
+
+    function commitList(items) {
+        var out = []
+        if (!items)
+            return out
+        for (var i = 0; i < items.length; ++i) {
+            var item = items[i]
+            if (item && item.commit) {
+                if (item.commit.hex)
+                    out.push(String(item.commit.hex))
+                else
+                    out.push(String(item.commit))
+            }
+        }
+        return out
+    }
+
     function mapPoolEntries(listLike) {
         var out = []
         if (!listLike)
@@ -86,23 +223,137 @@ Item {
             var tx   = e.tx || {}
             var body = tx.body || {}
 
-            var fee    = Number(tx.fee || e.fee || 0)
-            var weight = Number(tx.weight || e.weight || 0)
+            var fee    = Number(tx.fee || e.fee || totalKernelFee(body) || 0)
             var inputs  = (body.inputs  && body.inputs.length)  || e.inputs  || 0
             var outputs = (body.outputs && body.outputs.length) || e.outputs || 0
             var kernels = (body.kernels && body.kernels.length) || e.kernels || 0
-            var id      = e.id || tx.tx_id || ("tx-" + i)
+            var id      = deriveTransactionId(e, tx, body, i)
+            var txAt    = e.txAt || e.tx_at || ""
+            var source  = normalizeSource(e.src)
 
             out.push({
                 id: id,
                 fee: fee,
-                weight: weight,
                 inputs: inputs,
                 outputs: outputs,
-                kernels: kernels
+                kernels: kernels,
+                txAt: txAt ? String(txAt) : "",
+                source: source ? String(source) : "",
+                offset: tx && tx.offset && tx.offset.hex ? String(tx.offset.hex) : "",
+                kernelExcesses: kernelExcesses(body),
+                kernelSignatures: kernelSignatures(body),
+                kernelFeatures: kernelFeatureNames(body),
+                inputCommits: commitList(body.inputs),
+                outputCommits: commitList(body.outputs)
             })
         }
         return out
+    }
+
+    function normalizeHistoryEntry(entry, fallbackIndex) {
+        var item = entry || {}
+        return {
+            id: item.id ? String(item.id) : ("tx-" + fallbackIndex),
+            fee: Number(item.fee || 0),
+            inputs: Number(item.inputs || 0),
+            outputs: Number(item.outputs || 0),
+            kernels: Number(item.kernels || 0),
+            txAt: item.txAt ? String(item.txAt) : "",
+            source: normalizeSource(item.source),
+            offset: item.offset ? String(item.offset) : "",
+            kernelExcesses: item.kernelExcesses || [],
+            kernelSignatures: item.kernelSignatures || [],
+            kernelFeatures: item.kernelFeatures || [],
+            inputCommits: item.inputCommits || [],
+            outputCommits: item.outputCommits || [],
+            observedAt: item.observedAt ? String(item.observedAt) : new Date().toISOString()
+        }
+    }
+
+    function openTransactionDetails(entry) {
+        selectedTransaction = normalizeHistoryEntry(entry, 0)
+        transactionDetailsDialog.open()
+    }
+
+    function joinLines(values) {
+        if (!values || values.length === 0)
+            return "-"
+        return values.join("\n")
+    }
+
+    function copyToClipboard(text) {
+        if (text === undefined || text === null)
+            return
+
+        if (typeof text === "string")
+            text = text.trim()
+
+        if (!text || text === "-")
+            return
+
+        if (typeof Clipboard !== "undefined" && Clipboard)
+            Clipboard.text = String(text)
+    }
+
+    function loadHistoryFromStore() {
+        if (!settingsStore || typeof settingsStore.transactionHistoryJson !== "string") {
+            historyEntries = []
+            return
+        }
+
+        try {
+            var parsed = JSON.parse(settingsStore.transactionHistoryJson)
+            if (!Array.isArray(parsed)) {
+                historyEntries = []
+                return
+            }
+
+            var normalized = []
+            for (var i = 0; i < parsed.length; ++i)
+                normalized.push(normalizeHistoryEntry(parsed[i], i))
+
+            historyEntries = normalized.slice(0, historyLimit)
+        } catch (err) {
+            console.warn("Transaction history parse failed:", err)
+            historyEntries = []
+        }
+    }
+
+    function saveHistoryToStore() {
+        if (!settingsStore)
+            return
+
+        settingsStore.transactionHistoryJson = JSON.stringify(historyEntries.slice(0, historyLimit))
+    }
+
+    function clearHistory() {
+        historyEntries = []
+        saveHistoryToStore()
+    }
+
+    function rememberTransactions(newEntries) {
+        if (!Array.isArray(newEntries) || newEntries.length === 0)
+            return
+
+        var known = {}
+        for (var i = 0; i < historyEntries.length; ++i)
+            known[historyEntries[i].id] = true
+
+        var additions = []
+        for (var j = 0; j < newEntries.length; ++j) {
+            var candidate = normalizeHistoryEntry(newEntries[j], j)
+            if (!candidate.id || known[candidate.id])
+                continue
+
+            known[candidate.id] = true
+            additions.push(candidate)
+        }
+
+        if (additions.length === 0)
+            return
+
+        historyEntries = additions.concat(historyEntries).slice(0, historyLimit)
+        saveHistoryToStore()
     }
 
     // ------------------------------------------------------------------
@@ -144,7 +395,10 @@ Item {
             stopMempoolPolling()
     }
 
-    Component.onCompleted: updatePollingState()
+    Component.onCompleted: {
+        updatePollingState()
+        loadHistoryFromStore()
+    }
     onForeignApiChanged: updatePollingState()
     onNodeRunningChanged: {
         updatePollingState()
@@ -153,6 +407,15 @@ Item {
         }
     }
     Component.onDestruction: stopMempoolPolling()
+
+    Connections {
+        target: settingsStore
+        ignoreUnknownSignals: true
+
+        function onTransactionHistoryJsonChanged() {
+            loadHistoryFromStore()
+        }
+    }
 
     // ------------------------------------------------------------------
     // Foreign API signals
@@ -174,7 +437,9 @@ Item {
         }
 
         function onUnconfirmedTransactionsUpdated(list) {
-            entries = mapPoolEntries(list)
+            var mapped = mapPoolEntries(list)
+            entries = mapped
+            rememberTransactions(mapped)
         }
     }
 
@@ -248,9 +513,8 @@ Item {
         }
 
         // Info chips for pool and stempool sizes
-        Flow {
+        RowLayout {
             Layout.fillWidth: true
-            width: parent.width
             spacing: compactLayout ? 8 : 12
 
             InfoChip {
@@ -261,27 +525,6 @@ Item {
             InfoChip {
                 label: i18n ? i18n.t("tx_stempool") : "Stempool"
                 value: stempoolSize
-            }
-        }
-
-        // Legend for the block colors / sources
-        Flow {
-            Layout.fillWidth: true
-            width: parent.width
-            spacing: compactLayout ? 6 : 10
-
-            LegendChip {
-                label: i18n ? i18n.t("tx_legend_high_fee") : "High fee"
-            }
-
-            LegendChip {
-                label: i18n ? i18n.t("tx_legend_low_fee") : "Low fee"
-                invert: true
-            }
-
-            LegendChip {
-                label: i18n ? i18n.t("tx_legend_pool") : "Pool"
-                colorMode: "src-pool"
             }
         }
 
@@ -319,11 +562,11 @@ Item {
                             height: 100
                             txId:    entries[index].id
                             fee:     entries[index].fee
-                            weight:  entries[index].weight
                             inputs:  entries[index].inputs
                             outputs: entries[index].outputs
                             kernels: entries[index].kernels
                             i18n:    root.i18n
+                            onBlockClicked: openTransactionDetails(entries[index])
                         }
                     }
                 }
@@ -339,10 +582,257 @@ Item {
             }
         }
 
+        Frame {
+            Layout.fillWidth: true
+            Layout.preferredHeight: compactLayout ? 260 : 300
+            padding: 12
+            background: Rectangle {
+                color: "#101010"
+                radius: 12
+                border.color: "#252525"
+            }
+
+            ColumnLayout {
+                anchors.fill: parent
+                spacing: 10
+
+                RowLayout {
+                    Layout.fillWidth: true
+
+                    Label {
+                        text: i18n ? i18n.t("tx_history_title") : "Transaction history"
+                        color: "white"
+                        font.pixelSize: 18
+                        font.bold: true
+                        Layout.fillWidth: true
+                    }
+
+                    Label {
+                        text: i18n ? i18n.t("tx_history_limit").arg(historyLimit) : ("Last " + historyLimit)
+                        color: "#9a9a9a"
+                        font.pixelSize: 12
+                    }
+
+                    Button {
+                        text: i18n ? i18n.t("tx_history_clear") : "Clear"
+                        flat: true
+                        onClicked: clearHistory()
+
+                        background: Rectangle {
+                            radius: 6
+                            color: parent.down ? "#2f2f2f" : (parent.hovered ? "#3a3a3a" : "#242424")
+                            border.color: "#555"
+                            border.width: 1
+                        }
+
+                        contentItem: Text {
+                            text: parent.text
+                            color: "white"
+                            font.pixelSize: 12
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                    }
+                }
+
+                ListView {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    clip: true
+                    spacing: 8
+                    model: Array.isArray(historyEntries) ? historyEntries.length : 0
+
+                    delegate: Rectangle {
+                        width: ListView.view.width
+                        height: detailsColumn.implicitHeight + 20
+                        radius: 10
+                        color: "#171717"
+                        border.color: "#2a2a2a"
+
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: openTransactionDetails(historyEntries[index])
+                        }
+
+                        ColumnLayout {
+                            id: detailsColumn
+                            anchors.fill: parent
+                            anchors.margins: 10
+                            spacing: 6
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 8
+
+                                Label {
+                                    Layout.fillWidth: true
+                                    text: historyEntries[index].id
+                                    color: "white"
+                                    font.pixelSize: 13
+                                    elide: Text.ElideMiddle
+                                }
+
+                                Label {
+                                    text: historyEntries[index].observedAt
+                                    color: "#9a9a9a"
+                                    font.pixelSize: 12
+                                }
+                            }
+
+                            Label {
+                                Layout.fillWidth: true
+                                text: (i18n ? i18n.t("tx_history_stats") : "Fee %1 | I/O/K %2/%3/%4")
+                                      .arg(historyEntries[index].fee)
+                                      .arg(historyEntries[index].inputs)
+                                      .arg(historyEntries[index].outputs)
+                                      .arg(historyEntries[index].kernels)
+                                color: "#d0d0d0"
+                                font.pixelSize: 12
+                                wrapMode: Text.WordWrap
+                            }
+                        }
+                    }
+
+                    Label {
+                        anchors.centerIn: parent
+                        visible: historyEntries.length === 0
+                        text: i18n ? i18n.t("tx_history_empty") : "No recent transactions stored yet."
+                        color: "#8c8c8c"
+                        font.pixelSize: 14
+                    }
+
+                    ScrollBar.vertical: ScrollBar {
+                        policy: ScrollBar.AsNeeded
+                    }
+                }
+            }
+        }
+
         StatusBar {
             id: status
             Layout.fillWidth: true
             i18n: root.i18n
+        }
+    }
+
+    Dialog {
+        id: transactionDetailsDialog
+        modal: true
+        anchors.centerIn: Overlay.overlay
+        width: Math.min(root.width - 32, 720)
+        height: Math.min(root.height - 32, detailsContent.implicitHeight + 140)
+        padding: 16
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+        background: Rectangle {
+            radius: 8
+            color: "#2b2b2b"
+            border.color: "#555"
+            border.width: 1
+        }
+
+        header: Label {
+            text: i18n ? i18n.t("tx_details_title") : "Transaction details"
+            color: "white"
+            font.bold: true
+            font.pixelSize: 20
+            padding: 16
+        }
+
+        contentItem: ScrollView {
+            clip: true
+            implicitHeight: Math.min(detailsContent.implicitHeight, root.height - 180)
+
+            ColumnLayout {
+                id: detailsContent
+                width: transactionDetailsDialog.availableWidth
+                spacing: 10
+
+                Repeater {
+                    model: [
+                        { label: "ID", value: selectedTransaction ? selectedTransaction.id : "-" },
+                        { label: "Observed", value: selectedTransaction ? selectedTransaction.observedAt : "-" },
+                        { label: "Source", value: selectedTransaction ? (selectedTransaction.source || "-") : "-" },
+                        { label: i18n ? i18n.t("tx_details_tx_at") : "Timestamp", value: selectedTransaction ? (selectedTransaction.txAt || "-") : "-" },
+                        { label: "Fee", value: selectedTransaction ? selectedTransaction.fee : 0 },
+                        { label: "Offset", value: selectedTransaction ? (selectedTransaction.offset || "-") : "-" },
+                        { label: "Kernel features", value: selectedTransaction ? joinLines(selectedTransaction.kernelFeatures) : "-" },
+                        { label: "Kernel excess", value: selectedTransaction ? joinLines(selectedTransaction.kernelExcesses) : "-" },
+                        { label: "Kernel signature", value: selectedTransaction ? joinLines(selectedTransaction.kernelSignatures) : "-" },
+                        { label: "Input commits", value: selectedTransaction ? joinLines(selectedTransaction.inputCommits) : "-" },
+                        { label: "Output commits", value: selectedTransaction ? joinLines(selectedTransaction.outputCommits) : "-" }
+                    ]
+
+                    delegate: Rectangle {
+                        Layout.fillWidth: true
+                        color: "transparent"
+                        border.color: "#3a3a3a"
+                        border.width: 1
+                        radius: 6
+                        implicitHeight: contentColumn.implicitHeight + 16
+
+                        ColumnLayout {
+                            id: contentColumn
+                            anchors.fill: parent
+                            anchors.margins: 8
+                            spacing: 6
+
+                            RowLayout {
+                                Layout.fillWidth: true
+
+                                Label {
+                                    text: modelData.label
+                                    color: "white"
+                                    font.bold: true
+                                    Layout.fillWidth: true
+                                }
+
+                                Button {
+                                    text: i18n ? i18n.t("tx_details_copy") : "Copy"
+                                    flat: true
+                                    onClicked: copyToClipboard(modelData.value)
+
+                                    background: Rectangle {
+                                        radius: 6
+                                        color: parent.down ? "#2f2f2f" : (parent.hovered ? "#3a3a3a" : "#242424")
+                                        border.color: "#555"
+                                        border.width: 1
+                                    }
+
+                                    contentItem: Text {
+                                        text: parent.text
+                                        color: "white"
+                                        font.pixelSize: 12
+                                        horizontalAlignment: Text.AlignHCenter
+                                        verticalAlignment: Text.AlignVCenter
+                                    }
+                                }
+                            }
+
+                            TextArea {
+                                Layout.fillWidth: true
+                                readOnly: true
+                                text: String(modelData.value)
+                                wrapMode: TextEdit.WrapAnywhere
+                                selectByMouse: true
+                                color: "#cccccc"
+                                background: Rectangle {
+                                    color: "#1f1f1f"
+                                    radius: 4
+                                    border.color: "#2f2f2f"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        footer: DialogButtonBox {
+            Button {
+                text: i18n ? i18n.t("app_close", "Close") : "Close"
+                onClicked: transactionDetailsDialog.close()
+            }
         }
     }
 
@@ -395,9 +885,14 @@ Item {
                     text: tipCard.tipHeight > 0
                           ? tipCard.tipHeight.toLocaleString(Qt.locale(), "f", 0)
                           : "-"
-                    color: "white"
-                    font.pixelSize: 28
+                    color: "#ffd46a"
+                    font.pixelSize: 18
                     font.bold: true
+                }
+
+                Item {
+                    Layout.fillWidth: true
+                    height: stackedLayout ? 14 : 8
                 }
             }
 
@@ -492,29 +987,39 @@ Item {
         id: chip
         property string label: ""
         property var value: ""
+        property int labelWidth: 78
 
         radius: 10
         color: "#161616"
         border.color: "#2a2a2a"
         height: 32
-        width: Math.max(160, row.implicitWidth + 20)
+        width: Math.max(180, row.implicitWidth + 20)
 
         Row {
             id: row
             anchors.fill: parent
             anchors.margins: 10
             spacing: 10
+            height: parent.height - 20
 
             Label {
                 text: label + ":"
                 color: "#bbbbbb"
                 font.pixelSize: 12
+                width: chip.labelWidth
+                height: parent.height
+                horizontalAlignment: Text.AlignLeft
+                verticalAlignment: Text.AlignVCenter
             }
 
             Label {
                 text: "" + value
                 color: "white"
                 font.bold: true
+                width: Math.max(40, chip.width - chip.labelWidth - 30)
+                height: parent.height
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
             }
         }
     }
@@ -566,11 +1071,11 @@ Item {
 
         property string txId: ""
         property real fee: 0
-        property real weight: 0
         property int inputs: 0
         property int outputs: 0
         property int kernels: 0
         property var i18n: null
+        signal blockClicked()
 
         radius: 12
         border.color: "#2a2a2a"
@@ -630,18 +1135,6 @@ Item {
                     color: "#eee"
                     font.pixelSize: 12
                 }
-
-                Label {
-                    text: i18n ? i18n.t("tx_block_weight_short") : "W:"
-                    color: "#bbb"
-                    font.pixelSize: 11
-                }
-
-                Label {
-                    text: weight.toString()
-                    color: "#eee"
-                    font.pixelSize: 12
-                }
             }
 
             Row {
@@ -672,7 +1165,6 @@ Item {
         ToolTip.text:
             (i18n ? i18n.t("tx_block_tooltip_tx") : "Tx") + ": " + (txId || "") +
             "\n" + (i18n ? i18n.t("tx_block_tooltip_fee") : "Fee") + ": " + fee +
-            "\n" + (i18n ? i18n.t("tx_block_tooltip_weight") : "Weight") + ": " + weight +
             "\n" + (i18n ? i18n.t("tx_block_tooltip_io") : "I/O/K") + ": " +
             inputs + "/" + outputs + "/" + kernels
 
@@ -680,6 +1172,7 @@ Item {
             id: hover
             anchors.fill: parent
             hoverEnabled: true
+            onClicked: block.blockClicked()
         }
     }
 

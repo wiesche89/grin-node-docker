@@ -75,6 +75,7 @@ ApplicationWindow {
         property string controllerUrlOverride: ""
         property string languageCode: "en"
         property bool backgroundEnabled: true
+        property string transactionHistoryJson: "[]"
     }
 
     property bool backgroundEnabled: appSettings.backgroundEnabled
@@ -330,6 +331,7 @@ ApplicationWindow {
                     nodeRunning: homePage.nodeRunning
                     compactLayout: root.compactLayout
                     nodeManager: grinMgr
+                    settingsStore: appSettings
                     i18n: i18n
                 }
 
