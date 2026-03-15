@@ -319,6 +319,67 @@ Item {
             }
 
             // ================================================================
+            // APPEARANCE CARD
+            // ================================================================
+            Rectangle {
+                Layout.fillWidth: true
+                radius: 8
+                color: "#252525"
+                border.color: "#3a3a3a"
+                border.width: 1
+                implicitHeight: appearanceBox.implicitHeight + 32
+
+                ColumnLayout {
+                    id: appearanceBox
+                    anchors.fill: parent
+                    anchors.margins: 16
+                    spacing: 12
+
+                    Label {
+                        text: i18n ? i18n.t("settings_appearance_title") : "Appearance"
+                        color: "#f0f0f0"
+                        font.pixelSize: compactLayout ? 18 : 20
+                        font.bold: true
+                        Layout.fillWidth: true
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 12
+
+                        Label {
+                            text: i18n ? i18n.t("settings_background_label") : "Show background"
+                            color: "#dddddd"
+                            font.pixelSize: 14
+                            Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignVCenter
+                            wrapMode: Text.WordWrap
+                        }
+
+                        Switch {
+                            id: backgroundSwitch
+                            checked: settingsStore ? settingsStore.backgroundEnabled : true
+
+                            onToggled: {
+                                if (settingsStore)
+                                    settingsStore.backgroundEnabled = checked
+                            }
+                        }
+                    }
+
+                    Label {
+                        text: i18n
+                              ? i18n.t("settings_background_info")
+                              : "Disable the background image to use a plain dark appearance."
+                        color: "#999999"
+                        font.pixelSize: 12
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
+                    }
+                }
+            }
+
+            // ================================================================
             // CONTROLLER URL CARD
             // ================================================================
             Rectangle {

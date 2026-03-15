@@ -74,7 +74,10 @@ ApplicationWindow {
 
         property string controllerUrlOverride: ""
         property string languageCode: "en"
+        property bool backgroundEnabled: true
     }
+
+    property bool backgroundEnabled: appSettings.backgroundEnabled
 
     // -----------------------------------------------------------------
     // Global internationalization helper
@@ -161,7 +164,7 @@ ApplicationWindow {
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         background: Rectangle {
             color: "#2d2d2d"
-            opacity: 0.9
+            opacity: root.backgroundEnabled ? 0.9 : 1.0
         }
 
         Column {
@@ -203,6 +206,7 @@ ApplicationWindow {
     // Background image with soft gradient overlay
     // -----------------------------------------------------------------
     Image {
+        visible: root.backgroundEnabled
         anchors.fill: parent
         source: "qrc:/res/media/grin-node/image_10.jpg"
         fillMode: Image.PreserveAspectCrop
@@ -232,7 +236,7 @@ ApplicationWindow {
             Layout.fillHeight: true
             visible: !root.compactLayout
             color: "#2d2d2d"
-            opacity: 0.7
+            opacity: root.backgroundEnabled ? 0.7 : 1.0
 
             Column {
                 anchors.fill: parent
@@ -268,7 +272,9 @@ ApplicationWindow {
             Layout.fillHeight: true
             color: "#1e1e1e"
             // Slightly more transparent for Map page, darker for others
-            opacity: root.currentIndex === 1 ? 0.85 : 0.7
+            opacity: root.backgroundEnabled
+                     ? (root.currentIndex === 1 ? 0.85 : 0.7)
+                     : 1.0
 
             StackLayout {
                 id: stack
