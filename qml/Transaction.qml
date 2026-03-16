@@ -36,6 +36,8 @@ Item {
     property var historyEntries: []
     property int historyLimit: 50
     property var selectedTransaction: null
+    readonly property int poolBlocksMinimumHeight: compactLayout ? 340 : 280
+    readonly property int historyMinimumHeight: compactLayout ? 260 : 300
 
     // ------------------------------------------------------------------
     // Helper: Robust tip mapping from arbitrary payload
@@ -477,13 +479,17 @@ Item {
     // ------------------------------------------------------------------
     // Main layout
     // ------------------------------------------------------------------
-    ColumnLayout {
+    ScrollView {
+        id: transactionPageScroll
         anchors.fill: parent
-        Layout.fillWidth: true
-        Layout.fillHeight: true
-        Layout.alignment: Qt.AlignTop
         anchors.margins: compactLayout ? 12 : 20
-        spacing: 16
+        clip: true
+        contentWidth: availableWidth
+
+        ColumnLayout {
+            width: transactionPageScroll.availableWidth
+            height: Math.max(implicitHeight, transactionPageScroll.availableHeight)
+            spacing: 16
 
         // Header
         GridLayout {
@@ -531,7 +537,9 @@ Item {
         // Content: pool transactions as small visual blocks
         Frame {
             Layout.fillWidth: true
-            Layout.fillHeight: true
+            Layout.fillHeight: !compactLayout
+            Layout.minimumHeight: poolBlocksMinimumHeight
+            Layout.preferredHeight: poolBlocksMinimumHeight
             padding: 12
             background: Rectangle {
                 color: "#101010"
@@ -584,7 +592,8 @@ Item {
 
         Frame {
             Layout.fillWidth: true
-            Layout.preferredHeight: compactLayout ? 260 : 300
+            Layout.minimumHeight: historyMinimumHeight
+            Layout.preferredHeight: historyMinimumHeight
             padding: 12
             background: Rectangle {
                 color: "#101010"
@@ -710,10 +719,11 @@ Item {
             }
         }
 
-        StatusBar {
-            id: status
-            Layout.fillWidth: true
-            i18n: root.i18n
+            StatusBar {
+                id: status
+                Layout.fillWidth: true
+                i18n: root.i18n
+            }
         }
     }
 

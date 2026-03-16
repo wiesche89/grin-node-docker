@@ -34,6 +34,7 @@ Item {
     property bool hasUserSelection: false
     readonly property int chainNodeWidth: 220
     readonly property int chainConnectorWidth: 48
+    readonly property int detailsMinimumHeight: compactLayout ? 520 : 320
     property string blockSearchText: ""
     property int pendingSearchHeight: -1
     property bool pendingScrollToLeft: false
@@ -537,10 +538,17 @@ Item {
     // ---------------------------------------------------
     // UI layout
     // ---------------------------------------------------
-    ColumnLayout {
+    ScrollView {
+        id: chainPageScroll
         anchors.fill: parent
         anchors.margins: compactLayout ? 12 : 20
-        spacing: 20
+        clip: true
+        contentWidth: availableWidth
+
+        ColumnLayout {
+            width: chainPageScroll.availableWidth
+            height: Math.max(implicitHeight, chainPageScroll.availableHeight)
+            spacing: 20
 
         // ----------------------- Header row -----------------------
         GridLayout {
@@ -695,7 +703,9 @@ Item {
         // ----------------------- Details area -----------------------
         Frame {
             Layout.fillWidth: true
-            Layout.fillHeight: true
+            Layout.fillHeight: !compactLayout
+            Layout.minimumHeight: detailsMinimumHeight
+            Layout.preferredHeight: detailsMinimumHeight
             padding: 12
             background: Rectangle {
                 color: "#121212"
@@ -746,6 +756,7 @@ Item {
                 StackLayout {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
+                    Layout.minimumHeight: Math.max(0, detailsMinimumHeight - tabsBar.implicitHeight - 48)
                     currentIndex: tabsBar.currentIndex
 
                     // ---- Header tab ----
@@ -1058,9 +1069,10 @@ Item {
             Layout.fillWidth: true
         }
 
-        StatusBar {
-            id: status
-            Layout.fillWidth: true
+            StatusBar {
+                id: status
+                Layout.fillWidth: true
+            }
         }
     }
 
