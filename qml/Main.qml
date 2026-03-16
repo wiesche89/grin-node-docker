@@ -169,35 +169,46 @@ ApplicationWindow {
             opacity: root.backgroundEnabled ? 0.9 : 1.0
         }
 
-        Column {
+        Flickable {
             anchors.fill: parent
-            anchors.margins: 20
-            spacing: 15
+            clip: true
+            contentWidth: width
+            contentHeight: drawerNavColumn.implicitHeight + 40
+            boundsBehavior: Flickable.StopAtBounds
+            ScrollBar.vertical: ScrollBar {}
 
-            SidebarButton {
-                width: parent.width
-                text: "\u2190 Umbrel"
-                onClicked: {
-                    Qt.openUrlExternally(root.umbrelHomeUrl)
-                    sidebarDrawer.close()
-                }
-            }
+            Column {
+                id: drawerNavColumn
+                x: 20
+                y: 20
+                width: sidebarDrawer.width - 40
+                spacing: 15
 
-            Rectangle {
-                width: parent.width
-                height: 1
-                color: "#4a4a4a"
-                opacity: 0.8
-            }
-
-            Repeater {
-                model: navigationModel
-                delegate: SidebarButton {
+                SidebarButton {
                     width: parent.width
-                    text: i18n ? i18n.t(titleKey) : titleKey
+                    text: "\u2190 Umbrel"
                     onClicked: {
-                        root.currentIndex = index
+                        Qt.openUrlExternally(root.umbrelHomeUrl)
                         sidebarDrawer.close()
+                    }
+                }
+
+                Rectangle {
+                    width: parent.width
+                    height: 1
+                    color: "#4a4a4a"
+                    opacity: 0.8
+                }
+
+                Repeater {
+                    model: navigationModel
+                    delegate: SidebarButton {
+                        width: parent.width
+                        text: i18n ? i18n.t(titleKey) : titleKey
+                        onClicked: {
+                            root.currentIndex = index
+                            sidebarDrawer.close()
+                        }
                     }
                 }
             }
@@ -240,29 +251,41 @@ ApplicationWindow {
             color: "#2d2d2d"
             opacity: root.backgroundEnabled ? 0.7 : 1.0
 
-            Column {
+            Flickable {
                 anchors.fill: parent
-                anchors.margins: 10
-                anchors.topMargin: 80
-                spacing: 15
+                clip: true
+                contentWidth: width
+                contentHeight: desktopNavColumn.implicitHeight + 90
+                boundsBehavior: Flickable.StopAtBounds
+                ScrollBar.vertical: ScrollBar {}
 
-                SidebarButton {
-                    text: "\u2190 Umbrel"
-                    onClicked: Qt.openUrlExternally(root.umbrelHomeUrl)
-                }
+                Column {
+                    id: desktopNavColumn
+                    x: 10
+                    y: 80
+                    width: parent.width - 20
+                    spacing: 15
 
-                Rectangle {
-                    width: parent.width
-                    height: 1
-                    color: "#4a4a4a"
-                    opacity: 0.8
-                }
+                    SidebarButton {
+                        width: parent.width
+                        text: "\u2190 Umbrel"
+                        onClicked: Qt.openUrlExternally(root.umbrelHomeUrl)
+                    }
 
-                Repeater {
-                    model: navigationModel
-                    delegate: SidebarButton {
-                        text: i18n ? i18n.t(titleKey) : titleKey
-                        onClicked: root.currentIndex = index
+                    Rectangle {
+                        width: parent.width
+                        height: 1
+                        color: "#4a4a4a"
+                        opacity: 0.8
+                    }
+
+                    Repeater {
+                        model: navigationModel
+                        delegate: SidebarButton {
+                            width: parent.width
+                            text: i18n ? i18n.t(titleKey) : titleKey
+                            onClicked: root.currentIndex = index
+                        }
                     }
                 }
             }
