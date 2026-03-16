@@ -32,6 +32,9 @@ Item {
     // Selection / details
     property int selectedIndex: -1
     property bool hasUserSelection: false
+    property string selectedBlockHash: ""
+    property int selectedBlockHeight: -1
+    property var detailsRaw: null
     readonly property int chainNodeWidth: 220
     readonly property int chainConnectorWidth: 48
     readonly property int detailsMinimumHeight: compactLayout ? 520 : 320
@@ -39,6 +42,10 @@ Item {
     property int pendingSearchHeight: -1
     property bool pendingScrollToLeft: false
     property bool dummySelected: false
+    property int detailsTabIndex: 0
+    property bool awaitingTipUpdate: false
+    property bool awaitingBlocksUpdate: false
+    property bool awaitingBlockLookup: false
     property int blockCadenceMs: 60000
     property double nowMs: Date.now()
     readonly property double dummyProgress: blockCadenceMs > 0 ? ((nowMs % blockCadenceMs) / blockCadenceMs) : 0
@@ -105,6 +112,31 @@ Item {
             return
         if (typeof Clipboard !== "undefined" && Clipboard)
             Clipboard.text = String(text)
+    }
+    function setDetailsTab(index) {
+        detailsTabIndex = index
+        if (tabsBar)
+            tabsBar.currentIndex = index
+    }
+    function rememberSelection(rawBlock) {
+        var header = headerOf(rawBlock)
+        selectedBlockHash = String(get(header, "hash", ""))
+        selectedBlockHeight = toNum(get(header, "height", -1))
+    }
+    function clearRememberedSelection() {
+        selectedBlockHash = ""
+        selectedBlockHeight = -1
+    }
+    function selectRawIndex(rawIndex, resetTab) {
+        if (rawIndex < 0 || rawIndex >= blocksRaw.length)
+            return
+        hasUserSelection = true
+        dummySelected = false
+        selectedIndex = rawIndex
+        detailsRaw = blocksRaw[rawIndex]
+        rememberSelection(blocksRaw[rawIndex])
+        if (resetTab)
+            setDetailsTab(0)
     }
     function headerOf(rb) {
         var h = get(rb,"header",null)
@@ -213,12 +245,19 @@ Item {
     function findSelectedIndex(rawBlocks, previousRaw) {
         if (!rawBlocks || rawBlocks.length === 0)
             return -1
-        if (!previousRaw)
-            return 0
+        if (selectedBlockHash.length === 0 && selectedBlockHeight < 0 && !previousRaw)
+            return hasUserSelection ? -1 : 0
 
-        var previousHeader = headerOf(previousRaw)
-        var previousHash = String(get(previousHeader, "hash", ""))
-        var previousHeight = toNum(get(previousHeader, "height", 0))
+        var previousHash = selectedBlockHash
+        var previousHeight = selectedBlockHeight
+
+        if ((previousHash.length === 0 || previousHeight < 0) && previousRaw) {
+            var previousHeader = headerOf(previousRaw)
+            if (previousHash.length === 0)
+                previousHash = String(get(previousHeader, "hash", ""))
+            if (previousHeight < 0)
+                previousHeight = toNum(get(previousHeader, "height", 0))
+        }
 
         for (var i = 0; i < rawBlocks.length; ++i) {
             var candidateHeader = headerOf(rawBlocks[i])
@@ -232,7 +271,7 @@ Item {
                 return j
         }
 
-        return 0
+        return hasUserSelection ? -1 : 0
     }
 
     function findVisibleBlockIndex(query) {
@@ -273,6 +312,7 @@ Item {
             start = Math.max(0, end - lastCount + 1)
         }
 
+        awaitingBlocksUpdate = true
         foreignApi.getBlocksAsync(start, end, lastCount, false)
     }
 
@@ -297,6 +337,7 @@ Item {
             if (foreignApi && query.length > 0) {
                 pendingSearchHeight = -1
                 root.hasUserSelection = true
+                awaitingBlockLookup = true
                 foreignApi.getBlockAsync(0, query, "")
                 status.show(tr("chain_search_loading", "Loading block..."))
                 return
@@ -307,9 +348,8 @@ Item {
         }
 
         root.hasUserSelection = true
-        root.dummySelected = false
-        root.selectedIndex = root.blocks[visibleIndex].rawIndex
-        tabsBar.currentIndex = 0
+        root.selectRawIndex(root.blocks[visibleIndex].rawIndex, true)
+        setDetailsTab(0)
         Qt.callLater(function() { scrollToVisibleIndex(visibleIndex) })
         status.show(tr("chain_search_found", "Block selected."))
     }
@@ -320,7 +360,9 @@ Item {
         hasUserSelection = false
         selectedIndex = -1
         dummySelected = true
-        tabsBar.currentIndex = 0
+        detailsRaw = null
+        clearRememberedSelection()
+        setDetailsTab(0)
         if (tip.height > 0)
             loadBlocksForTip(tip.height)
     }
@@ -361,11 +403,11 @@ Item {
     // ---------------------------------------------------
     // Derived data from selection
     // ---------------------------------------------------
-    property var selectedRaw: (!dummySelected && selectedIndex >= 0 && selectedIndex < blocksRaw.length) ? blocksRaw[selectedIndex] : null
-    property var hdrData:     selectedRaw ? mapHeaderFromRaw(selectedRaw)  : null
-    property var inputsData:  selectedRaw ? mapInputsFromRaw(selectedRaw)  : []
-    property var outputsData: selectedRaw ? mapOutputsFromRaw(selectedRaw) : []
-    property var kernelsData: selectedRaw ? mapKernelsFromRaw(selectedRaw) : []
+    property var selectedRaw: detailsRaw
+    property var hdrData:     detailsRaw ? mapHeaderFromRaw(detailsRaw)  : null
+    property var inputsData:  detailsRaw ? mapInputsFromRaw(detailsRaw)  : []
+    property var outputsData: detailsRaw ? mapOutputsFromRaw(detailsRaw) : []
+    property var kernelsData: detailsRaw ? mapKernelsFromRaw(detailsRaw) : []
     property int detailsHeight: hdrData ? hdrData.height : -1
 
     // ---------------------------------------------------
@@ -378,12 +420,13 @@ Item {
         selectedIndex = -1
         hasUserSelection = false
         dummySelected = false
+        detailsRaw = null
+        clearRememberedSelection()
 
         if (status)
             status.message = ""
 
-        if (tabsBar)
-            tabsBar.currentIndex = 0
+        setDetailsTab(0)
     }
 
     // ---------------------------------------------------
@@ -395,8 +438,10 @@ Item {
             return
         }
         try {
+            awaitingTipUpdate = true
             foreignApi.getTipAsync()
         } catch(e) {
+            awaitingTipUpdate = false
             status.showError(tr("chain_err_get_tip", "getTipAsync failed: %1").replace("%1", e))
         }
     }
@@ -405,8 +450,10 @@ Item {
         if (!foreignApi) return
         var start = Math.max(0, h - (lastCount - 1))
         try {
+            awaitingBlocksUpdate = true
             foreignApi.getBlocksAsync(start, h, lastCount, false)
         } catch(e) {
+            awaitingBlocksUpdate = false
             status.showError(tr("chain_err_get_blocks", "getBlocksAsync failed: %1").replace("%1", e))
         }
     }
@@ -442,6 +489,9 @@ Item {
         ignoreUnknownSignals: true
 
         function onTipUpdated(payload) {
+            if (!awaitingTipUpdate)
+                return
+            awaitingTipUpdate = false
             var t = payload || {}
             var h  = get(t,"height",0)
             var lb = get(t,"lastBlockPushed", get(t,"last_block_pushed",""))
@@ -456,22 +506,19 @@ Item {
 
             if (tip.height > 0) {
                 Qt.callLater(function() {
-                    var selectedHeight = hasUserSelection && selectedRaw
-                            ? toNum(get(headerOf(selectedRaw), "height", 0))
-                            : -1
-                    if (selectedHeight > 0)
-                        loadBlocksAroundHeight(selectedHeight)
-                    else
-                        loadBlocksForTip(tip.height)
+                    loadBlocksForTip(tip.height)
                 })
             } else {
                 blocksRaw = []
                 blocks = []
-                selectedIndex = -1
-            }
+                    selectedIndex = -1
+                }
         }
 
         function onBlocksUpdated(blockList, lastRetrievedHeight) {
+            if (!awaitingBlocksUpdate)
+                return
+            awaitingBlocksUpdate = false
             var previousRaw = selectedRaw
 
             blocksRaw = blockList || []
@@ -496,9 +543,8 @@ Item {
                     }
 
                     if (searchedIndex >= 0) {
-                        dummySelected = false
-                        selectedIndex = root.blocks[searchedIndex].rawIndex
-                        tabsBar.currentIndex = 0
+                        selectRawIndex(root.blocks[searchedIndex].rawIndex, true)
+                        setDetailsTab(0)
                         scrollToVisibleIndex(searchedIndex)
                         status.show(tr("chain_search_found", "Block selected."))
                     } else {
@@ -517,6 +563,9 @@ Item {
         }
 
         function onBlockUpdated(block) {
+            if (!awaitingBlockLookup)
+                return
+            awaitingBlockLookup = false
             var blockHeight = toNum(get(headerOf(block), "height", 0))
             if (blockHeight <= 0) {
                 status.showError(tr("chain_search_not_found", "Block not found in the loaded range."))
@@ -528,6 +577,9 @@ Item {
         }
 
         function onBlockLookupFailed(message) {
+            if (!awaitingBlockLookup)
+                return
+            awaitingBlockLookup = false
             pendingSearchHeight = -1
             status.showError(message && String(message).length > 0
                              ? String(message)
@@ -689,9 +741,7 @@ Item {
                                     if (blk.isDummy) {
                                         showLatestBlocks()
                                     } else {
-                                        root.hasUserSelection = true
-                                        root.dummySelected = false
-                                        root.selectedIndex = blk.rawIndex
+                                        root.selectRawIndex(blk.rawIndex, false)
                                     }
                                 }
                             }
@@ -741,7 +791,8 @@ Item {
                 TabBar {
                     id: tabsBar
                     Layout.fillWidth: true
-                    currentIndex: 0
+                    Component.onCompleted: currentIndex = root.detailsTabIndex
+                    onCurrentIndexChanged: root.detailsTabIndex = currentIndex
                     background: Rectangle {
                         radius: 8
                         color: "#151515"
