@@ -38,6 +38,9 @@ Item {
     property int pendingSearchHeight: -1
     property bool pendingScrollToLeft: false
     property bool dummySelected: false
+    property int blockCadenceMs: 60000
+    property double nowMs: Date.now()
+    readonly property double dummyProgress: blockCadenceMs > 0 ? ((nowMs % blockCadenceMs) / blockCadenceMs) : 0
 
     // ---------------------------------------------------
     // i18n helper
@@ -83,6 +86,14 @@ Item {
         if (typeof x === "number" && isFinite(x)) return x
         var ms = Date.parse(x || "")
         return isNaN(ms) ? 0 : Math.floor(ms / 1000)
+    }
+
+    Timer {
+        id: dummyCycleTimer
+        interval: 33
+        repeat: true
+        running: true
+        onTriggered: root.nowMs = Date.now()
     }
     function copyToClipboard(text) {
         if (text === undefined || text === null)
@@ -463,7 +474,6 @@ Item {
             var previousRaw = selectedRaw
 
             blocksRaw = blockList || []
-            console.log("chain onBlocksUpdated raw length:", blocksRaw.length, "lastHeight:", lastRetrievedHeight)
 
             var simple = []
             for (var i = 0; i < blocksRaw.length; ++i) {
@@ -473,10 +483,6 @@ Item {
             }
             simple.sort(function(a,b){ return b.height - a.height })
             root.blocks = [latestDummyBlock()].concat(simple)
-            if (root.blocks.length > 0)
-                console.log("chain mapped blocks first/last heights:", root.blocks[0].height, root.blocks[root.blocks.length - 1].height)
-            else
-                console.log("chain mapped blocks empty")
 
             Qt.callLater(function() {
                 if (pendingSearchHeight >= 0) {
@@ -506,8 +512,6 @@ Item {
                     flick.contentX = 0
                     pendingScrollToLeft = false
                 }
-                console.log("chain selectedIndex after update:", selectedIndex, "hasUserSelection:", hasUserSelection)
-                console.log("chain flick contentX:", flick.contentX, "contentWidth:", flick.contentWidth, "width:", flick.width)
             })
         }
 
@@ -1231,12 +1235,110 @@ Item {
         id: tileRect
         property var blk
         signal clicked()
+        readonly property bool isDummyBlock: !!(blk && blk.isDummy)
+        readonly property real phase: blk ? ((Math.max(0, Number(blk.height || 0)) % 7) / 7.0) : 0
+        readonly property real glowPulse: 0.5 + 0.5 * Math.sin((root.nowMs / 1300.0) + (phase * 6.28318))
+        readonly property real floatPulse: Math.sin((root.nowMs / 2100.0) + (phase * 6.28318))
+        readonly property real accentPulse: 0.5 + 0.5 * Math.sin((root.nowMs / 1700.0) + (phase * 6.28318))
+        readonly property real shimmerProgress: ((root.nowMs / 6200.0) + phase * 0.33) % 1.0
+        readonly property real orbPhase: (root.nowMs / 2400.0) + (phase * 6.28318)
 
         radius: 12
-        border.color: blk && blk.isDummy ? "#3f8f62" : "#2a2a2a"
-        color: blk && blk.isDummy
+        border.color: isDummyBlock ? "#3f8f62" : "#2a2a2a"
+        color: isDummyBlock
                ? Qt.rgba(0.26, 0.56, 0.36, 0.28)
                : ((blk && (blk.height % 2) === 0) ? "#171a20" : "#1b1f27")
+        transform: [
+            Translate { y: tileRect.isDummyBlock ? 0 : (-2.2 * tileRect.floatPulse) }
+        ]
+
+        Rectangle {
+            anchors.fill: parent
+            radius: parent.radius
+            visible: tileRect.isDummyBlock
+            color: "transparent"
+            border.color: Qt.rgba(0.58, 0.95, 0.68, 0.20 + 0.35 * (1 - root.dummyProgress))
+            border.width: 1
+            opacity: 0.9
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            radius: parent.radius
+            visible: !tileRect.isDummyBlock
+            color: Qt.rgba(0.40, 0.56, 0.95, 0.02 + 0.02 * tileRect.glowPulse)
+            border.color: Qt.rgba(0.52, 0.66, 1.0, 0.08 + 0.08 * tileRect.accentPulse)
+            border.width: 1
+        }
+
+        Rectangle {
+            visible: !tileRect.isDummyBlock
+            width: parent.width * 0.24
+            height: parent.height * 1.55
+            rotation: 22
+            x: -width + ((parent.width + width * 2) * tileRect.shimmerProgress)
+            y: -parent.height * 0.18
+            radius: width / 2
+            gradient: Gradient {
+                GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.0) }
+                GradientStop { position: 0.5; color: Qt.rgba(1, 1, 1, 0.05) }
+                GradientStop { position: 1.0; color: Qt.rgba(1, 1, 1, 0.0) }
+            }
+        }
+
+        Rectangle {
+            visible: !tileRect.isDummyBlock
+            width: parent.width * 0.38
+            height: 3
+            radius: 2
+            x: 12
+            y: 8
+            color: Qt.rgba(0.60, 0.76, 1.0, 0.16 + 0.12 * tileRect.accentPulse)
+        }
+
+        Rectangle {
+            visible: !tileRect.isDummyBlock
+            width: 54
+            height: 54
+            radius: 27
+            x: parent.width * 0.66 + 8 * Math.sin(tileRect.orbPhase)
+            y: 10 + 6 * Math.cos(tileRect.orbPhase * 0.9)
+            color: Qt.rgba(0.45, 0.63, 1.0, 0.08 + 0.05 * tileRect.glowPulse)
+        }
+
+        Rectangle {
+            visible: !tileRect.isDummyBlock
+            width: 32
+            height: 32
+            radius: 16
+            x: 14 + 5 * Math.cos(tileRect.orbPhase * 1.15)
+            y: parent.height * 0.58 + 4 * Math.sin(tileRect.orbPhase * 1.1)
+            color: Qt.rgba(0.62, 0.79, 1.0, 0.05 + 0.04 * tileRect.accentPulse)
+        }
+
+        Rectangle {
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.bottom: parent.bottom
+            anchors.bottomMargin: 8
+            width: parent.width - 20
+            height: 7
+            radius: 4
+            visible: tileRect.isDummyBlock
+            color: Qt.rgba(0.10, 0.20, 0.14, 0.90)
+            border.color: "#2f5b40"
+            border.width: 1
+
+            Rectangle {
+                width: Math.max(10, (parent.width - 2) * root.dummyProgress)
+                height: parent.height - 2
+                anchors.left: parent.left
+                anchors.leftMargin: 1
+                anchors.verticalCenter: parent.verticalCenter
+                radius: 3
+                color: Qt.rgba(0.54, 0.95, 0.62, 0.75)
+                opacity: 0.78 + 0.16 * Math.sin(root.nowMs / 900.0)
+            }
+        }
 
         Column {
             anchors.fill: parent
@@ -1246,30 +1348,30 @@ Item {
             Row {
                 spacing: 8
                 Label {
-                    text: blk && blk.isDummy
+                    text: tileRect.isDummyBlock
                           ? "+"
                           : ("#" + (blk ? blk.height : ""))
-                    color: blk && blk.isDummy ? "#d9ffd8" : "white"
+                    color: tileRect.isDummyBlock ? "#d9ffd8" : "white"
                     font.bold: true
                 }
                 Rectangle {
                     width: 6
                     height: 6
                     radius: 3
-                    color: "#7aa2ff"
+                    color: tileRect.isDummyBlock ? "#7ee38f" : "#7aa2ff"
                 }
                 Label {
-                    text: blk && blk.isDummy
+                    text: tileRect.isDummyBlock
                           ? tr("chain_dummy_title", "Next block")
                           : ((blk && blk.hash) ? blk.hash.substr(0,10) : "")
-                    color: blk && blk.isDummy ? "#c8f5cf" : "#cfcfcf"
+                    color: tileRect.isDummyBlock ? "#c8f5cf" : "#cfcfcf"
                     font.pixelSize: 12
                     elide: Text.ElideRight
                 }
             }
 
             Label {
-                text: blk && blk.isDummy
+                text: tileRect.isDummyBlock
                       ? tr("chain_dummy_info", "Click to return to latest blocks")
                       : (blk
                       ? (tr("chain_tile_stats", "In:%1  Out:%2  Ker:%3")
@@ -1284,13 +1386,13 @@ Item {
             }
 
             Label {
-                text: blk && blk.isDummy
+                text: tileRect.isDummyBlock
                       ? tr("chain_dummy_height", "Builds on #%1").replace("%1", Math.max(0, tip.height))
                       : ((blk && blk.timestamp)
                       ? new Date(blk.timestamp*1000).toLocaleTimeString()
                       : ""
 )
-                color: "#aaaaaa"
+                color: tileRect.isDummyBlock ? "#a7dcb1" : "#aaaaaa"
                 font.pixelSize: 11
             }
 
