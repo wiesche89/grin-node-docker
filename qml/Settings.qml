@@ -134,7 +134,6 @@ Item {
         target: nodeManager
 
         function onChainDeleted(kind) {
-            console.log("Settings: onChainDeleted, kind =", kind)
             settingsRoot.requestInFlight = false
 
             var msg
@@ -168,7 +167,6 @@ Item {
                 return
             }
 
-            console.log("Settings: delete error, requestInFlight = false")
             settingsRoot.requestInFlight = false
 
             deleteErrorOverlay.titleText =
@@ -192,7 +190,6 @@ Item {
 
         // Result-Typ ist Result<bool>, in QML behandeln wir das einfach als "fertig"
         function onValidateChainFinished(result) {
-            console.log("Settings: validateChainFinished", result)
             validateInFlight = false
 
             var msg = i18n
@@ -205,7 +202,6 @@ Item {
         }
 
         function onCompactChainFinished(result) {
-            console.log("Settings: compactChainFinished", result)
             compactInFlight = false
 
             var msg = i18n
@@ -553,7 +549,6 @@ Item {
                                     return
                                 }
 
-                                console.log("Settings: delete RUST, requestInFlight = true")
                                 settingsRoot.lastDeleteMessage = ""
                                 settingsRoot.requestInFlight = true
                                 nodeManager.deleteRustChain()
@@ -581,7 +576,6 @@ Item {
                                     return
                                 }
 
-                                console.log("Settings: delete GRIN++, requestInFlight = true")
                                 settingsRoot.lastDeleteMessage = ""
                                 settingsRoot.requestInFlight = true
                                 nodeManager.deleteGrinppChain()
@@ -691,7 +685,6 @@ Item {
                                     return
                                 }
 
-                                console.log("Settings: validateChainAsync, inFlight = true")
                                 validateInFlight = true
                                 settingsRoot.lastDeleteMessage = ""
                                 // false = keine Abkürzung: volle Validation von RProof/Kernels
@@ -803,7 +796,6 @@ Item {
                                     return
                                 }
 
-                                console.log("Settings: compactChainAsync, inFlight = true")
                                 compactInFlight = true
                                 settingsRoot.lastDeleteMessage = ""
                                 ownerApi.compactChainAsync()

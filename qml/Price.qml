@@ -70,8 +70,6 @@ Item {
             return
 
         var data = priceSource.history || []
-        console.log("priceChart history:", data.length,
-                    priceSource && priceSource.loading ? "loading" : "idle")
         priceCandles.clear()
 
         var chartWidth = priceChart ? priceChart.width : Math.max(360, priceContent ? priceContent.width : 360)
@@ -89,10 +87,8 @@ Item {
                 continue
 
             var priceValue = toNumber(entry.price)
-            if (isNaN(priceValue)) {
-                console.warn("priceChart invalid price entry", entry)
+            if (isNaN(priceValue))
                 continue
-            }
 
             rawPoints.push({ timestamp: parsed, price: priceValue })
             minRawTs = Math.min(minRawTs, parsed)
@@ -146,19 +142,12 @@ Item {
         bucketKeys.sort(function(a, b) { return a - b })
         if (bucketKeys.length > desiredCandles)
             bucketKeys = bucketKeys.slice(bucketKeys.length - desiredCandles)
-        console.log("priceChart buckets:", bucketKeys.length, "bucketSizeMs:", bucketSizeMs)
-
         var candleEntries = []
         for (var k = 0; k < bucketKeys.length; ++k) {
             var key2 = bucketKeys[k]
             if (buckets[key2])
                 candleEntries.push(buckets[key2])
         }
-
-        if (candleEntries.length === 0) {
-            console.log("priceChart has no API buckets, waiting for data")
-        }
-
         priceCandles.clear()
         for (var m = 0; m < candleEntries.length; ++m) {
             var candle = candleEntries[m]
@@ -189,7 +178,6 @@ Item {
         }
 
         var appendedPoints = candleEntries.length
-        console.log("priceChart appendedPoints:", appendedPoints, "minPrice:", minPrice, "maxPrice:", maxPrice)
         chartHasData = appendedPoints > 0
 
         if (chartHasData && maxTs <= minTs)
@@ -225,14 +213,6 @@ Item {
         chartMinPrice = minPrice
         chartMaxPrice = maxPrice
 
-        if (chartHasData) {
-            console.log("priceChart bounds:",
-                        appendedPoints,
-                        chartMinPrice.toFixed(6),
-                        chartMaxPrice.toFixed(6),
-                        new Date(chartMinTs).toISOString(),
-                        new Date(chartMaxTs).toISOString())
-        }
     }
 
     Timer {
@@ -370,17 +350,6 @@ Item {
                             // QML-Farben (alle transparent)
                             backgroundColor: "transparent"
                             plotAreaColor: "transparent"
-
-                            Component.onCompleted: {
-                                // 1) Sichtbarkeit der Hintergründe komplett aus
-                                priceChart.chart.backgroundVisible = false
-                                priceChart.chart.plotAreaBackgroundVisible = false
-
-                                // 2) Zusätzlich: Brushes knallhart transparent setzen (Theme überschreibt gerne Farben)
-                                // (QChart properties in QML)
-                                priceChart.chart.backgroundBrush = Qt.rgba(0, 0, 0, 0)
-                                priceChart.chart.plotAreaBackgroundBrush = Qt.rgba(0, 0, 0, 0)
-                            }
 
                             DateTimeAxis {
                                 id: timeAxis

@@ -40,23 +40,12 @@ QtObject {
         // en.json erwartet:  qrc:/qml/qml/translation/en.json
         var url = Qt.resolvedUrl("translation/" + lang + ".json")
 
-        console.log("I18n: loadLanguage(", lang, "), resolved url =", url)
-
         var xhr = new XMLHttpRequest()
         xhr.open("GET", url)
 
         xhr.onreadystatechange = function() {
-            console.log("I18n: XHR state change for", url,
-                        "readyState =", xhr.readyState,
-                        "status =", xhr.status)
-
             if (xhr.readyState !== XMLHttpRequest.DONE)
                 return
-
-            console.log("I18n: XHR DONE for", url,
-                        "status =", xhr.status,
-                        "response length =",
-                        xhr.responseText ? xhr.responseText.length : 0)
 
             if (xhr.status === 200 || xhr.status === 0) {
                 try {
@@ -64,8 +53,6 @@ QtObject {
                     dict = obj
                     var keyCount = Object.keys(dict).length
                     loaded = true  // <- wichtig: triggert Rebinding
-                    console.log("I18n: successfully loaded language", lang,
-                                "with", keyCount, "keys from", url)
                 } catch (e) {
                     console.error("I18n: failed to parse JSON for", lang,
                                   "from", url, "error:", e)
@@ -80,13 +67,11 @@ QtObject {
 
                 // Simple fallback to English if the requested language failed
                 if (lang !== "en") {
-                    console.log("I18n: retrying with English fallback")
                     loadLanguage("en")
                 }
             }
         }
 
-        console.log("I18n: sending XHR for", url)
         xhr.send()
     }
 
@@ -94,24 +79,18 @@ QtObject {
     // Initialization
     // ------------------------------------------------------------------
     Component.onCompleted: {
-        console.log("I18n: Component.onCompleted, initial language =", language)
-
         // Read initial language from settings if available
         if (settingsStore && settingsStore.languageCode) {
             language = settingsStore.languageCode
-            console.log("I18n: language restored from settings:", language)
         }
 
         loadLanguage(language)
     }
 
     onLanguageChanged: {
-        console.log("I18n: language changed to", language)
-
         // Persist language choice to settings
         if (settingsStore) {
             settingsStore.languageCode = language
-            console.log("I18n: language stored to settings:", language)
         }
 
         loadLanguage(language)

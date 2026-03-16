@@ -1,7 +1,6 @@
 QT += qml quick gui core charts quickcontrols2 network
 
 CONFIG += c++11
-CONFIG += qml_debug
 
 INCLUDEPATH += \
     src \

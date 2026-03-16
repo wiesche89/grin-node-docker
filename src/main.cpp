@@ -126,7 +126,6 @@ int main(int argc, char *argv[])
         if (!families.isEmpty()) {
             QFont cjk(families.first());
             app.setFont(cjk);
-            qDebug() << "Using CJK font family:" << families.first();
         } else {
             qWarning() << "No font families found in CJK font";
         }

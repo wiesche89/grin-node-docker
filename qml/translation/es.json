@@ -4,6 +4,7 @@
   "nav_peers": "Pares",
   "nav_tx": "Transacciones",
   "nav_chain": "Cadena",
+  "nav_utxo": "UTXO",
   "nav_price": "Precio",
   "nav_wallet": "Wallet",
   "nav_settings": "Configuración",
@@ -181,6 +182,9 @@
   "chain_err_foreign_api": "API externa no configurada.",
   "chain_err_get_tip": "getTipAsync falló: %1",
   "chain_err_get_blocks": "getBlocksAsync falló: %1",
+  "utxo_description": "Explora salidas no gastadas por rango de índices PMMR. También puedes resolver el rango a partir de un intervalo de alturas de bloque.",
+  "utxo_block_range_hint": "Resuelve primero un rango de índices PMMR a partir de alturas de bloque y luego carga los UTXO correspondientes.",
+  "utxo_resolve_height_button": "Resolver rango PMMR",
 
   "settings_title": "Configuración",
 

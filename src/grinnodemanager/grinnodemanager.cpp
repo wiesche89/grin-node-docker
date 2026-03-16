@@ -1,7 +1,6 @@
 #include "grinnodemanager.h"
 #include <QJsonDocument>
 #include <QJsonParseError>
-#include <QDebug>
 
 static inline QString safePretty(const QByteArray &data)
 {
@@ -99,7 +98,6 @@ void GrinNodeManager::deleteGrinppChain()
 // ---------- Public API ----------
 void GrinNodeManager::getStatus()
 {
-    qDebug() << Q_FUNC_INFO;
     QNetworkRequest req = makeRequest("status");
     m_net->get(req);
 }
@@ -121,7 +119,6 @@ void GrinNodeManager::stopStatusPolling()
 // ---------- Core helpers ----------
 void GrinNodeManager::start(NodeKind kind, const QStringList &args)
 {
-    qDebug() << Q_FUNC_INFO;
     QNetworkRequest req = makeRequest("start/" + kindToPath(kind));
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
 
@@ -135,14 +132,12 @@ void GrinNodeManager::start(NodeKind kind, const QStringList &args)
 
 void GrinNodeManager::stop(NodeKind kind)
 {
-    qDebug() << Q_FUNC_INFO;
     QNetworkRequest req = makeRequest("stop/" + kindToPath(kind));
     m_net->post(req, QByteArray());
 }
 
 void GrinNodeManager::restart(NodeKind kind, const QStringList &args)
 {
-    qDebug() << Q_FUNC_INFO;
     QNetworkRequest req = makeRequest("restart/" + kindToPath(kind));
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
 
@@ -156,7 +151,6 @@ void GrinNodeManager::restart(NodeKind kind, const QStringList &args)
 
 void GrinNodeManager::getLogs(NodeKind kind, int n)
 {
-    qDebug() << Q_FUNC_INFO;
     // Query-String direkt an den relativen Pfad hängen
     QNetworkRequest req = makeRequest(QString("logs/%1?n=%2")
                                           .arg(kindToPath(kind))
@@ -167,7 +161,6 @@ void GrinNodeManager::getLogs(NodeKind kind, int n)
 // NEU: /delete/<kind>
 void GrinNodeManager::deleteChain(NodeKind kind)
 {
-    qDebug() << Q_FUNC_INFO;
     QNetworkRequest req = makeRequest("delete/" + kindToPath(kind));
 
     // analog zu start/stop/restart als POST
@@ -262,8 +255,6 @@ void GrinNodeManager::onReplyFinished(QNetworkReply *reply)
 
     const QByteArray payload = reply->readAll();
 
-    qDebug() << "[GrinNodeManager] Network:" << statusCode << apiPath << payload;
-
     auto finish = [&] {
         const QString pretty = safePretty(payload);
         if (pretty != m_lastResponse) {
@@ -273,7 +264,6 @@ void GrinNodeManager::onReplyFinished(QNetworkReply *reply)
     };
 
     if (statusCode != 200) {
-        qDebug() << "[GrinNodeManager] Network error:" << statusCode << apiPath << payload;
         emit errorOccurred(QString("[%1] %2")
                                .arg(reply->url().toString(), reply->errorString()));
         finish();

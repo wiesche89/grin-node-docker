@@ -294,7 +294,6 @@ Item {
             if (homeRoot.nodeState === "rust" || homeRoot.nodeState === "grinpp") {
                 startStatusAndPeersPolling()
             } else {
-                console.log("BootTimer skipped because no node is running")
             }
         }
     }
@@ -595,7 +594,6 @@ Item {
         target: mgr
 
         function onNodeStarted(kind) {
-            console.log("QML: nodeStarted signal received, kind=", kind)
             homeRoot.nodeState =
                     (kind === GrinNodeManager.Rust) ? "rust" : "grinpp"
             bootTimer.restart()
@@ -624,7 +622,6 @@ Item {
         }
 
         function onErrorOccurred(msg) {
-            console.log("QML: errorOccurred", msg)
             controllerErrorMessage = msg
             controllerError = true
             if (homeRoot.nodeState === "rustStarting"
@@ -648,7 +645,6 @@ Item {
                     applyControllerStatus(obj)
                 }
             } catch (e) {
-                console.log("Failed to parse mgr.lastResponse:", e, mgr.lastResponse)
             }
         }
     }

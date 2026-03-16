@@ -58,6 +58,7 @@ ApplicationWindow {
         "nav_peers",
         "nav_tx",
         "nav_chain",
+        "nav_utxo",
         "nav_price",
         "nav_wallet",
         "nav_settings"
@@ -98,9 +99,10 @@ ApplicationWindow {
         ListElement { titleKey: "nav_peers";    index: 2 }
         ListElement { titleKey: "nav_tx";       index: 3 }
         ListElement { titleKey: "nav_chain";    index: 4 }
-        ListElement { titleKey: "nav_price";    index: 5 }
-        ListElement { titleKey: "nav_wallet";   index: 6 }
-        ListElement { titleKey: "nav_settings"; index: 7 }
+        ListElement { titleKey: "nav_utxo";     index: 5 }
+        ListElement { titleKey: "nav_price";    index: 6 }
+        ListElement { titleKey: "nav_wallet";   index: 7 }
+        ListElement { titleKey: "nav_settings"; index: 8 }
     }
 
     // -----------------------------------------------------------------
@@ -115,9 +117,6 @@ ApplicationWindow {
         username: ""
         password: ""
 
-        onErrorOccurred: function(msg) {
-            console.log("GLOBAL mgr error:", msg)
-        }
     }
 
     // -----------------------------------------------------------------
@@ -349,6 +348,17 @@ ApplicationWindow {
                 }
 
                 // -----------------------------------------------------
+                // UTXO page - unspent output explorer
+                // -----------------------------------------------------
+                Utxo {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+
+                    compactLayout: root.compactLayout
+                    i18n: i18n
+                }
+
+                // -----------------------------------------------------
                 // Price page - grin price analysis
                 // -----------------------------------------------------
                 Price {
@@ -358,7 +368,7 @@ ApplicationWindow {
                     compactLayout: root.compactLayout
                     priceSource: priceAnalysis
                     i18n: i18n
-                    pageActive: root.currentIndex === 5
+                    pageActive: root.currentIndex === 6
                 }
 
                 // -----------------------------------------------------

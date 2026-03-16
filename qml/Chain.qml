@@ -643,12 +643,12 @@ Item {
         // ----------------------- Chain tiles row -----------------------
         Frame {
             Layout.fillWidth: true
-            Layout.preferredHeight: 170
+            Layout.preferredHeight: 190
             padding: 12
             background: Rectangle {
-                color: "#101010"
+                color: "transparent"
                 radius: 12
-                border.color: "#252525"
+                border.color: "transparent"
             }
 
             Flickable {
@@ -680,6 +680,9 @@ Item {
                                 nodeWidth: root.chainNodeWidth
                                 nodeHeight: 120
                                 connectorWidth: root.chainConnectorWidth
+                                depthProgress: root.blocks.length > 1
+                                               ? (index / Math.max(1, root.blocks.length - 1))
+                                               : 0
                                 blk: root.blocks[index]
                                 showConnector: index < (root.blocks.length - 1)
                                 onClickedBlock: {
@@ -1195,50 +1198,95 @@ Item {
         property int nodeWidth: 220
         property int nodeHeight: 120
         property int connectorWidth: 48
+        property real depthProgress: 0.0
+        readonly property int connectorDepth: 4
+        readonly property real nodeScale: 1.0 - (0.22 * depthProgress)
+        readonly property real nodeLift: -20 * depthProgress
+        readonly property real nodeInset: -10 * depthProgress
+        readonly property real nodeFade: 1.0 - (0.28 * depthProgress)
         signal clickedBlock()
 
         width: nodeWidth + (showConnector ? connectorWidth : 0)
-        height: nodeHeight
+        height: nodeHeight + connectorDepth
+        z: Math.round((1.0 - depthProgress) * 1000)
 
         BlockTile {
             id: blockTile
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
+            anchors.verticalCenterOffset: (-parent.connectorDepth / 2) + parent.nodeLift
             width: nodeWidth
             height: nodeHeight
             blk: parent.blk
+            depthProgress: parent.depthProgress
+            opacity: parent.nodeFade
+            layer.enabled: true
+            transform: [
+                Translate { x: blockTile.parent.nodeInset },
+                Scale {
+                    origin.x: blockTile.width / 2
+                    origin.y: blockTile.height / 2
+                    xScale: blockTile.parent.nodeScale
+                    yScale: blockTile.parent.nodeScale
+                }
+            ]
             onClicked: parent.clickedBlock()
         }
 
         Item {
             anchors.left: blockTile.right
+            anchors.leftMargin: -8 * parent.depthProgress
             anchors.verticalCenter: blockTile.verticalCenter
+            anchors.verticalCenterOffset: 4 * parent.depthProgress
             width: parent.connectorWidth
-            height: 8
+            height: 10
             visible: parent.showConnector
+            opacity: 0.95 - (0.40 * parent.depthProgress)
 
             Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
-                width: parent.width - 20
+                width: parent.width - 14
+                height: 10
+                radius: 4
+                color: Qt.rgba(0.42, 0.56, 0.88, 0.08)
+            }
+            Rectangle {
+                anchors.verticalCenter: parent.verticalCenter
+                width: parent.width - 14
                 height: 4
                 radius: 2
                 gradient: Gradient {
-                    GradientStop { position: 0.0; color: "#ffea70" }
-                    GradientStop { position: 1.0; color: "#ffcc33" }
+                    GradientStop { position: 0.0; color: Qt.rgba(0.61, 0.72, 0.88, 0.75) }
+                    GradientStop { position: 0.5; color: Qt.rgba(0.86, 0.91, 0.98, 0.95) }
+                    GradientStop { position: 1.0; color: Qt.rgba(0.46, 0.58, 0.78, 0.78) }
                 }
-                opacity: 0.9
+                opacity: 0.95
+            }
+            Rectangle {
+                anchors.verticalCenter: parent.verticalCenter
+                width: parent.width - 14
+                height: 1
+                radius: 1
+                color: Qt.rgba(1, 1, 1, 0.35)
             }
             Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
                 anchors.right: parent.right
-                width: 12
-                height: 12
-                rotation: 45
-                color: "#ffcc33"
-                border.color: "#ffee88"
+                width: 14
+                height: 14
+                radius: 7
+                color: "#dbe6f7"
+                border.color: "#f4f8ff"
                 border.width: 1
                 opacity: 0.95
-                radius: 1
+
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: 6
+                    height: 6
+                    radius: 3
+                    color: "#87a1c7"
+                }
             }
         }
     }
@@ -1246,30 +1294,64 @@ Item {
     component BlockTile: Rectangle {
         id: tileRect
         property var blk
+        property real depthProgress: 0.0
         signal clicked()
         readonly property bool isDummyBlock: !!(blk && blk.isDummy)
         readonly property real phase: blk ? ((Math.max(0, Number(blk.height || 0)) % 7) / 7.0) : 0
-        readonly property real glowPulse: 0.5 + 0.5 * Math.sin((root.nowMs / 1300.0) + (phase * 6.28318))
-        readonly property real floatPulse: Math.sin((root.nowMs / 2100.0) + (phase * 6.28318))
-        readonly property real accentPulse: 0.5 + 0.5 * Math.sin((root.nowMs / 1700.0) + (phase * 6.28318))
-        readonly property real shimmerProgress: ((root.nowMs / 6200.0) + phase * 0.33) % 1.0
-        readonly property real orbPhase: (root.nowMs / 2400.0) + (phase * 6.28318)
+        readonly property real glowPulse: 0.5 + 0.5 * Math.sin((root.nowMs / 1900.0) + (phase * 6.28318))
+        readonly property real accentPulse: 0.5 + 0.5 * Math.sin((root.nowMs / 2200.0) + (phase * 6.28318))
+        readonly property real depthX: compactLayout ? 7 : 12
+        readonly property real depthY: compactLayout ? 5 : 8
+        readonly property color frontColor: isDummyBlock
+                                           ? Qt.rgba(0.20, 0.36, 0.31, 0.88)
+                                           : ((blk && (blk.height % 2) === 0) ? "#2b3544" : "#313d4f")
+        readonly property color sideColor: isDummyBlock ? "#1a2823" : "#212a38"
+        readonly property color topColor: isDummyBlock ? "#39584b" : "#445268"
+        readonly property color edgeColor: isDummyBlock ? "#77b292" : "#86a0c4"
 
         radius: 12
-        border.color: isDummyBlock ? "#3f8f62" : "#2a2a2a"
-        color: isDummyBlock
-               ? Qt.rgba(0.26, 0.56, 0.36, 0.28)
-               : ((blk && (blk.height % 2) === 0) ? "#171a20" : "#1b1f27")
-        transform: [
-            Translate { y: tileRect.isDummyBlock ? 0 : (-2.2 * tileRect.floatPulse) }
-        ]
+        border.color: isDummyBlock ? "#6fa88a" : "#6680a6"
+        color: frontColor
+
+        Rectangle {
+            x: tileRect.depthX * 0.8
+            y: tileRect.height - 12 + tileRect.depthY
+            width: tileRect.width - 14
+            height: 16
+            radius: 8
+            color: Qt.rgba(0, 0, 0, tileRect.isDummyBlock ? 0.18 : 0.26)
+            opacity: 0.72 - (0.20 * tileRect.depthProgress)
+            z: -4
+        }
+
+        Rectangle {
+            x: tileRect.depthX
+            y: tileRect.depthY
+            width: tileRect.width - tileRect.depthX
+            height: tileRect.height - tileRect.depthY
+            radius: tileRect.radius - 2
+            color: sideColor
+            opacity: 0.96
+            z: -3
+        }
+
+        Rectangle {
+            x: tileRect.depthX * 0.55
+            y: tileRect.depthY * 0.55
+            width: tileRect.width - tileRect.depthX * 0.55
+            height: 16
+            radius: 8
+            color: topColor
+            opacity: 0.92
+            z: -2
+        }
 
         Rectangle {
             anchors.fill: parent
             radius: parent.radius
             visible: tileRect.isDummyBlock
             color: "transparent"
-            border.color: Qt.rgba(0.58, 0.95, 0.68, 0.20 + 0.35 * (1 - root.dummyProgress))
+            border.color: Qt.rgba(0.70, 0.90, 0.82, 0.22 + 0.26 * (1 - root.dummyProgress))
             border.width: 1
             opacity: 0.9
         }
@@ -1278,54 +1360,66 @@ Item {
             anchors.fill: parent
             radius: parent.radius
             visible: !tileRect.isDummyBlock
-            color: Qt.rgba(0.40, 0.56, 0.95, 0.02 + 0.02 * tileRect.glowPulse)
-            border.color: Qt.rgba(0.52, 0.66, 1.0, 0.08 + 0.08 * tileRect.accentPulse)
+            color: Qt.rgba(0.45, 0.58, 0.86, 0.06 + 0.03 * tileRect.glowPulse)
+            border.color: Qt.rgba(0.76, 0.86, 0.98, 0.24 + 0.08 * tileRect.accentPulse)
             border.width: 1
         }
 
         Rectangle {
             visible: !tileRect.isDummyBlock
-            width: parent.width * 0.24
-            height: parent.height * 1.55
-            rotation: 22
-            x: -width + ((parent.width + width * 2) * tileRect.shimmerProgress)
-            y: -parent.height * 0.18
-            radius: width / 2
+            x: 1
+            y: 1
+            width: parent.width - 2
+            height: Math.max(26, parent.height * 0.34)
+            radius: parent.radius - 1
             gradient: Gradient {
-                GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.0) }
-                GradientStop { position: 0.5; color: Qt.rgba(1, 1, 1, 0.05) }
-                GradientStop { position: 1.0; color: Qt.rgba(1, 1, 1, 0.0) }
+                GradientStop { position: 0.0; color: Qt.rgba(0.96, 0.98, 1.0, 0.16) }
+                GradientStop { position: 0.35; color: Qt.rgba(0.96, 0.98, 1.0, 0.05) }
+                GradientStop { position: 1.0; color: Qt.rgba(0.96, 0.98, 1.0, 0.01) }
             }
         }
 
         Rectangle {
             visible: !tileRect.isDummyBlock
-            width: parent.width * 0.38
-            height: 3
+            width: parent.width * 0.42
+            height: 4
             radius: 2
             x: 12
             y: 8
-            color: Qt.rgba(0.60, 0.76, 1.0, 0.16 + 0.12 * tileRect.accentPulse)
+            color: Qt.rgba(0.82, 0.88, 0.98, 0.28 + 0.12 * tileRect.accentPulse)
         }
 
         Rectangle {
             visible: !tileRect.isDummyBlock
-            width: 54
-            height: 54
-            radius: 27
-            x: parent.width * 0.66 + 8 * Math.sin(tileRect.orbPhase)
-            y: 10 + 6 * Math.cos(tileRect.orbPhase * 0.9)
-            color: Qt.rgba(0.45, 0.63, 1.0, 0.08 + 0.05 * tileRect.glowPulse)
+            x: parent.width - 14
+            y: 14
+            width: 3
+            height: parent.height - 28
+            radius: 1.5
+            color: Qt.rgba(1.0, 1.0, 1.0, 0.12)
         }
 
         Rectangle {
             visible: !tileRect.isDummyBlock
-            width: 32
-            height: 32
-            radius: 16
-            x: 14 + 5 * Math.cos(tileRect.orbPhase * 1.15)
-            y: parent.height * 0.58 + 4 * Math.sin(tileRect.orbPhase * 1.1)
-            color: Qt.rgba(0.62, 0.79, 1.0, 0.05 + 0.04 * tileRect.accentPulse)
+            x: 16
+            y: parent.height - 16
+            width: parent.width - 34
+            height: 2
+            radius: 1
+            color: Qt.rgba(0.10, 0.12, 0.18, 0.48)
+        }
+
+        Rectangle {
+            visible: !tileRect.isDummyBlock
+            x: 0
+            y: 0
+            width: parent.width
+            height: parent.height
+            radius: parent.radius
+            color: "transparent"
+            border.color: edgeColor
+            border.width: 1
+            opacity: 0.55
         }
 
         Rectangle {
