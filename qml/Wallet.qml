@@ -9,6 +9,7 @@ Item {
     Layout.fillHeight: true
 
     property bool compactLayout: false
+    property var settingsStore: null
     property var nodeManager: null
     property var i18n: null
 
@@ -24,15 +25,36 @@ Item {
                 return true
         }
 
-        if (typeof controllerBaseUrl === "object" && controllerBaseUrl && controllerBaseUrl.port)
-            return controllerBaseUrl.port() === 13416
+        if (typeof controllerBaseUrl === "object" && controllerBaseUrl && controllerBaseUrl.port
+                && typeof defaultTestnetControllerPort !== "undefined")
+            return controllerBaseUrl.port() === defaultTestnetControllerPort
 
         return false
     }
 
-    property string defaultIpPort: testnet
-        ? "http://umbrel.local:13416"
-        : "http://umbrel.local:3416"
+    function withoutTrailingSlash(value) {
+        var s = (value || "").toString()
+        while (s.length > 1 && s.endsWith("/"))
+            s = s.slice(0, -1)
+        return s
+    }
+
+    property string defaultTestnetIpPort: (
+        typeof controllerBaseUrl !== "undefined" && controllerBaseUrl !== null
+    ) ? withoutTrailingSlash(controllerBaseUrl.toString()) : ""
+
+    property string defaultMainnetIpPort: (
+        typeof defaultMainnetControllerUrl !== "undefined" && defaultMainnetControllerUrl
+    ) ? withoutTrailingSlash(defaultMainnetControllerUrl) : defaultTestnetIpPort
+
+    property string controllerOverrideIpPort: (
+        settingsStore && settingsStore.controllerUrlOverride
+        && settingsStore.controllerUrlOverride.length > 0
+    ) ? withoutTrailingSlash(settingsStore.controllerUrlOverride) : ""
+
+    property string defaultIpPort: controllerOverrideIpPort.length > 0
+        ? controllerOverrideIpPort
+        : (testnet ? defaultTestnetIpPort : defaultMainnetIpPort)
 
     property string defaultSecret: {
         if (typeof config !== "undefined" && config) {
@@ -163,7 +185,7 @@ Item {
                     TextField {
                         id: ipPortField
                         Layout.fillWidth: true
-                        placeholderText: "http://umbrel.local:3416"
+                        placeholderText: defaultIpPort
                         text: defaultIpPort
                         onTextChanged: rebuildQr()
                     }

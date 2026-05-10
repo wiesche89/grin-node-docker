@@ -23,6 +23,7 @@ Item {
 
     // Settings storage (Qt.labs.settings instance from Main.qml)
     property var settingsStore: null
+    property bool apiUrlsReady: false
 
     // Node manager from C++ (GrinNodeManager)
     property var nodeManager: null
@@ -81,21 +82,25 @@ Item {
     // -----------------------------------------------------------------
     property bool   isBooting: false
     property string currentNodeKind: "none"   // "none" | "rust" | "grinpp"
-    property string nodeState: "none"        // "none" | "rustStarting" | "grinppStarting" | "rust" | "grinpp"
+    property string nodeState: "none"        // "none" | "rustStarting" | "grinppStarting" | "rust" | "grinpp" | "external"
+    property bool directNodeApiReachable: false
 
     // Derived: node is running if either Rust or Grin++ is active
-    property bool nodeRunning: isRustRunning() || isGrinppRunning()
+    property bool nodeRunning: isRustRunning() || isGrinppRunning() || isExternalNodeRunning()
 
     property bool   controllerError: false
     property string controllerErrorMessage: ""
+    property bool   controllerReachable: false
+    property bool   controllerActionsAvailable: controllerReachable && mgr !== null
     property bool   controllerStatusPollingActive: false
     property bool   nodeOwnerStatusPollingActive: false
     property bool   peersPollingActive: false
+    property bool   initialOwnerApiCheckStarted: false
 
     // Uptime label and seconds (for the currently running node)
     property string nodeUptimeLabel: ""
     property int    nodeUptimeSeconds: -1
-    property bool   hasNodeUptime: nodeUptimeSeconds >= 0 && nodeUptimeLabel !== ""
+    property bool   hasNodeUptime: controllerReachable && nodeUptimeSeconds >= 0 && nodeUptimeLabel !== ""
 
     // -----------------------------------------------------------------
     // Helper: translation wrapper with fallback
@@ -108,10 +113,22 @@ Item {
     // Life-cycle: initialize polling and request initial status
     // -----------------------------------------------------------------
     Component.onCompleted: {
+        if (!apiUrlsReady)
+            return
+        runInitialApiChecks()
+    }
+
+    onApiUrlsReadyChanged: {
+        if (apiUrlsReady)
+            runInitialApiChecks()
+    }
+
+    function runInitialApiChecks() {
         if (mgr) {
             ensureControllerStatusPolling()
             mgr.getStatus()
         }
+        ensureInitialOwnerApiCheck()
     }
 
     // -----------------------------------------------------------------
@@ -144,6 +161,7 @@ Item {
 
     function isRustRunning()   { return nodeState === "rust"; }
     function isGrinppRunning() { return nodeState === "grinpp"; }
+    function isExternalNodeRunning() { return nodeState === "external"; }
     function isStarting()      { return nodeState === "rustStarting" || nodeState === "grinppStarting"; }
 
     function toPlainObject(obj) {
@@ -166,14 +184,32 @@ Item {
         controllerStatusPollingActive = true
     }
 
-    function startStatusAndPeersPolling() {
-        ensureControllerStatusPolling()
+    function ensureNodeOwnerStatusPolling(forceNow) {
         if (typeof nodeOwnerApi !== "undefined" && nodeOwnerApi) {
             if (!nodeOwnerStatusPollingActive
                     && typeof nodeOwnerApi.startStatusPolling === "function") {
                 nodeOwnerApi.startStatusPolling(10000)
                 nodeOwnerStatusPollingActive = true
+            } else if (forceNow && typeof nodeOwnerApi.getStatusAsync === "function") {
+                nodeOwnerApi.getStatusAsync()
             }
+        }
+    }
+
+    function ensureInitialOwnerApiCheck() {
+        if (!initialOwnerApiCheckStarted)
+            initialOwnerApiCheckStarted = true
+        ensureNodeOwnerStatusPolling(true)
+    }
+
+    function startStatusAndPeersPolling() {
+        ensureControllerStatusPolling()
+        startDirectNodeApiPolling()
+    }
+
+    function startDirectNodeApiPolling() {
+        ensureNodeOwnerStatusPolling(false)
+        if (typeof nodeOwnerApi !== "undefined" && nodeOwnerApi) {
             if (!peersPollingActive
                     && typeof nodeOwnerApi.startConnectedPeersPolling === "function") {
                 nodeOwnerApi.startConnectedPeersPolling(5000)
@@ -243,6 +279,9 @@ Item {
         }
 
         var previousState = homeRoot.nodeState
+        if (newState === "none" && homeRoot.directNodeApiReachable)
+            newState = "external"
+
         if (previousState !== newState) {
             homeRoot.nodeState = newState
 
@@ -273,11 +312,10 @@ Item {
         homeRoot.nodeUptimeSeconds = uptimeSeconds
 
         var nodeIsRunning = rustRunning || grinppRunning
-        if (nodeIsRunning && !bootTimer.running && previousState !== newState) {
-            // Ensure polling kicks in when we detect an already running node
-            bootTimer.restart()
-        }
+        if (nodeIsRunning)
+            startStatusAndPeersPolling()
 
+        controllerReachable = true
         controllerError = false
         controllerErrorOverlay.visible = false
     }
@@ -291,11 +329,35 @@ Item {
         repeat: false
         onTriggered: {
             isBooting = false
-            if (homeRoot.nodeState === "rust" || homeRoot.nodeState === "grinpp") {
+            if (homeRoot.nodeRunning) {
                 startStatusAndPeersPolling()
             } else {
             }
         }
+    }
+
+    function applyDirectNodeApiStatus(statusObj) {
+        var normalized = toPlainObject(statusObj)
+        if (!normalized)
+            return
+
+        directNodeApiReachable = true
+        controllerError = false
+        controllerErrorOverlay.visible = false
+
+        if (nodeState === "none" || nodeState === "rustStarting" || nodeState === "grinppStarting") {
+            nodeState = "external"
+            requestInFlight = false
+        }
+
+        startDirectNodeApiPolling()
+    }
+
+    onControllerApiUrlChanged: {
+        controllerReachable = false
+        directNodeApiReachable = false
+        if (nodeState === "external")
+            nodeState = "none"
     }
 
     // -----------------------------------------------------------------
@@ -413,7 +475,8 @@ Item {
                                     text: homeRoot.nodeState === "rustStarting"
                                           ? tr("home_btn_starting", "Starting...")
                                           : tr("home_btn_start", "Start")
-                                    enabled: homeRoot.nodeState === "none"
+                                    enabled: homeRoot.controllerActionsAvailable
+                                             && homeRoot.nodeState === "none"
                                              && !homeRoot.requestInFlight
                                     onClicked: {
                                         if (homeRoot.nodeState !== "none")
@@ -430,7 +493,8 @@ Item {
                                     Layout.preferredWidth: 200
                                     Layout.preferredHeight: 52
                                     text: tr("home_btn_restart", "Restart")
-                                    enabled: homeRoot.nodeState === "rust"
+                                    enabled: homeRoot.controllerActionsAvailable
+                                             && homeRoot.nodeState === "rust"
                                              && !homeRoot.requestInFlight
                                     onClicked: {
                                         homeRoot.requestInFlight = true
@@ -444,7 +508,8 @@ Item {
                                     Layout.preferredWidth: 200
                                     Layout.preferredHeight: 52
                                     text: tr("home_btn_stop", "Stop")
-                                    enabled: homeRoot.nodeState === "rust"
+                                    enabled: homeRoot.controllerActionsAvailable
+                                             && homeRoot.nodeState === "rust"
                                              && !homeRoot.requestInFlight
                                     onClicked: {
                                         homeRoot.requestInFlight = true
@@ -480,7 +545,8 @@ Item {
                                     text: homeRoot.nodeState === "grinppStarting"
                                           ? tr("home_btn_starting", "Starting...")
                                           : tr("home_btn_start", "Start")
-                                    enabled: homeRoot.nodeState === "none"
+                                    enabled: homeRoot.controllerActionsAvailable
+                                             && homeRoot.nodeState === "none"
                                              && !homeRoot.requestInFlight
                                     onClicked: {
                                         if (homeRoot.nodeState !== "none")
@@ -497,7 +563,8 @@ Item {
                                     Layout.preferredWidth: 200
                                     Layout.preferredHeight: 52
                                     text: tr("home_btn_restart", "Restart")
-                                    enabled: homeRoot.nodeState === "grinpp"
+                                    enabled: homeRoot.controllerActionsAvailable
+                                             && homeRoot.nodeState === "grinpp"
                                              && !homeRoot.requestInFlight
                                     onClicked: {
                                         homeRoot.requestInFlight = true
@@ -511,7 +578,8 @@ Item {
                                     Layout.preferredWidth: 200
                                     Layout.preferredHeight: 52
                                     text: tr("home_btn_stop", "Stop")
-                                    enabled: homeRoot.nodeState === "grinpp"
+                                    enabled: homeRoot.controllerActionsAvailable
+                                             && homeRoot.nodeState === "grinpp"
                                              && !homeRoot.requestInFlight
                                     onClicked: {
                                         homeRoot.requestInFlight = true
@@ -596,7 +664,7 @@ Item {
         function onNodeStarted(kind) {
             homeRoot.nodeState =
                     (kind === GrinNodeManager.Rust) ? "rust" : "grinpp"
-            bootTimer.restart()
+            startStatusAndPeersPolling()
             homeRoot.controllerError = false
             controllerErrorOverlay.active = false
             homeRoot.requestInFlight = false
@@ -605,7 +673,7 @@ Item {
         function onNodeRestarted(kind) {
             homeRoot.nodeState =
                     (kind === GrinNodeManager.Rust) ? "rust" : "grinpp"
-            bootTimer.restart()
+            startStatusAndPeersPolling()
             homeRoot.controllerError = false
             controllerErrorOverlay.active = false
             homeRoot.requestInFlight = false
@@ -622,6 +690,9 @@ Item {
         }
 
         function onErrorOccurred(msg) {
+            if (homeRoot.directNodeApiReachable)
+                return
+            homeRoot.controllerReachable = false
             controllerErrorMessage = msg
             controllerError = true
             if (homeRoot.nodeState === "rustStarting"
@@ -646,6 +717,14 @@ Item {
                 }
             } catch (e) {
             }
+        }
+    }
+
+    Connections {
+        target: nodeOwnerApi
+
+        function onStatusUpdated(statusObj) {
+            applyDirectNodeApiStatus(statusObj)
         }
     }
 }

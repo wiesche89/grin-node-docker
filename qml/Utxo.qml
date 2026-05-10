@@ -63,6 +63,18 @@ Item {
         return String(output.block_height)
     }
 
+    function userFacingUtxoError(message) {
+        var text = String(message || "")
+        if (text.indexOf("Json::Value::find") !== -1
+                || text.indexOf("TxHashSet not available") !== -1
+                || text.indexOf("requires objectValue or nullValue") !== -1) {
+            return tr("utxo_err_load_failed", "Failed to load UTXO outputs.")
+        }
+        return text.length > 0
+                ? text
+                : tr("utxo_err_load_failed", "Failed to load UTXO outputs.")
+    }
+
     function applyFilter() {
         var search = String(searchField.text || "").trim().toLowerCase()
         var typeText = String(typeFilter.currentText || "")
@@ -204,9 +216,7 @@ Item {
         function onUnspentOutputsLookupFailed(message) {
             loading = false
             probingLatestWindow = false
-            errorText = message && String(message).length > 0
-                    ? String(message)
-                    : tr("utxo_err_load_failed", "Failed to load UTXO outputs.")
+            errorText = userFacingUtxoError(message)
             status.showError(errorText)
         }
 

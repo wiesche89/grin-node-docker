@@ -18,7 +18,9 @@ import Grin 1.0          // GrinNodeManager
 ApplicationWindow {
     id: root
     visible: true
-    property string umbrelHomeUrl: "http://umbrel.local"
+    property string umbrelHomeUrl: (
+        typeof defaultUmbrelHomeUrl !== "undefined" && defaultUmbrelHomeUrl
+    ) ? defaultUmbrelHomeUrl : ""
 
     // -----------------------------------------------------------------
     // Window sizing
@@ -62,6 +64,7 @@ ApplicationWindow {
         "nav_utxo",
         "nav_price",
         "nav_wallet",
+        "nav_node_config",
         "nav_settings"
     ]
 
@@ -78,6 +81,64 @@ ApplicationWindow {
         property string languageCode: "en"
         property bool backgroundEnabled: true
         property string transactionHistoryJson: "[]"
+    }
+
+    property url defaultControllerUrl: {
+        if (typeof controllerBaseUrl !== "undefined" && controllerBaseUrl !== null)
+            return controllerBaseUrl.toString()
+        if (Qt.platform.os === "wasm" || Qt.platform.os === "wasm-emscripten")
+            return "./api/"
+        return ""
+    }
+
+    property url controllerApiUrl: {
+        var base = ""
+        if (appSettings.controllerUrlOverride
+                && appSettings.controllerUrlOverride.length > 0) {
+            base = appSettings.controllerUrlOverride
+        } else {
+            base = defaultControllerUrl.toString()
+        }
+
+        if (base !== "" && !base.endsWith("/"))
+            base += "/"
+
+        return base
+    }
+    property bool controllerApiUrlsReady: false
+    property bool controllerApiStartupApplied: false
+
+    function controllerEndpoint(path) {
+        var base = controllerApiUrl.toString()
+        if (base === "")
+            return ""
+        if (!base.endsWith("/"))
+            base += "/"
+        return base + path
+    }
+
+    function applyControllerApiUrls() {
+        controllerApiUrlsReady = false
+        if (typeof nodeOwnerApi !== "undefined" && nodeOwnerApi)
+            nodeOwnerApi.apiUrl = controllerEndpoint("v2/owner")
+        if (typeof nodeForeignApi !== "undefined" && nodeForeignApi)
+            nodeForeignApi.apiUrl = controllerEndpoint("v2/foreign")
+        controllerApiUrlsReady = controllerApiUrl.toString() !== ""
+    }
+
+    onControllerApiUrlChanged: {
+        if (controllerApiStartupApplied) {
+            applyControllerApiUrls()
+        } else {
+            controllerApiUrlsReady = false
+        }
+    }
+    Component.onCompleted: {
+        controllerApiUrlsReady = false
+        Qt.callLater(function() {
+            controllerApiStartupApplied = true
+            applyControllerApiUrls()
+        })
     }
 
     property bool backgroundEnabled: appSettings.backgroundEnabled
@@ -104,7 +165,8 @@ ApplicationWindow {
         ListElement { titleKey: "nav_utxo";     index: 6 }
         ListElement { titleKey: "nav_price";    index: 7 }
         ListElement { titleKey: "nav_wallet";   index: 8 }
-        ListElement { titleKey: "nav_settings"; index: 9 }
+        ListElement { titleKey: "nav_node_config"; index: 9 }
+        ListElement { titleKey: "nav_settings"; index: 10 }
     }
 
     // -----------------------------------------------------------------
@@ -113,8 +175,7 @@ ApplicationWindow {
     GrinNodeManager {
         id: grinMgr
 
-        // Base URL is computed in Home.qml and exposed as controllerApiUrl
-        baseUrl: homePage.controllerApiUrl
+        baseUrl: root.controllerApiUrl
 
         username: ""
         password: ""
@@ -315,6 +376,8 @@ ApplicationWindow {
                     Layout.fillHeight: true
 
                     compactLayout: root.compactLayout
+                    controllerApiUrl: root.controllerApiUrl
+                    apiUrlsReady: root.controllerApiUrlsReady
                     settingsStore: appSettings
                     nodeManager: grinMgr
                     i18n: i18n
@@ -415,8 +478,21 @@ ApplicationWindow {
                     Layout.fillHeight: true
 
                     compactLayout: root.compactLayout
+                    settingsStore: appSettings
                     nodeManager: grinMgr
                     i18n: i18n
+                }
+
+                // -----------------------------------------------------
+                // Node Config page - Grin++ get_config export
+                // -----------------------------------------------------
+                NodeConfig {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+
+                    compactLayout: root.compactLayout
+                    i18n: i18n
+                    pageActive: root.currentIndex === 9
                 }
 
                 // -----------------------------------------------------
@@ -428,6 +504,7 @@ ApplicationWindow {
 
                     compactLayout: root.compactLayout
                     settingsStore: appSettings
+                    defaultControllerUrl: root.defaultControllerUrl
                     nodeManager: grinMgr
                     nodeRunning: homePage.nodeRunning
                     i18n: i18n

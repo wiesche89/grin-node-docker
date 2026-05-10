@@ -42,7 +42,7 @@ Item {
         }
         if (Qt.platform.os === "wasm" || Qt.platform.os === "wasm-emscripten")
             return "./api/"
-        return "http://umbrel.local:3416/"
+        return ""
     }
 
     property string effectiveControllerUrl: (

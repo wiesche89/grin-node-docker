@@ -7,6 +7,12 @@
   "nav_utxo": "UTXO",
   "nav_price": "Precio",
   "nav_wallet": "Wallet",
+  "nav_node_config": "Node Config",
+  "node_config_title": "Node Config",
+  "node_config_description": "Export get_config de Grin++",
+  "node_config_refresh": "Actualizar",
+  "node_config_loading": "Cargando...",
+  "node_config_err_no_api": "Owner API no esta disponible.",
   "nav_settings": "Configuración",
   "wallet_title": "QR de la Wallet",
   "wallet_description": "Comparte los datos del controlador mediante este QR.",
@@ -311,12 +317,15 @@
   "status_sync_awaiting_peers": "Esperando pares",
 
   "status_sync_header": "1/7: Descargando\ncabeceras",
+  "status_header_sync_pihd": "PIHD",
+  "status_header_sync_legacy": "Legacy",
   "status_sync_pibd": "2/7: Descargando\nestado de transacciones (PIBD)",
   "status_sync_txhashset_download": "2/7: Descargando\nestado de la cadena",
   "status_sync_txhashset_waiting": "2/7: Descargando\nestado de la cadena.\nEsperando al par...",
 
   "status_sync_setup_headers": "3/7: Preparando para la\nvalidación\n(historial de kernels)",
   "status_sync_setup_pos": "3/7: Preparando para la\nvalidación\n(posición de kernels)",
+  "status_sync_setup_items": "3/7: Validando sumas\nde kernels",
   "status_sync_setup_generic": "3/7: Preparando el estado\nde la cadena para la validación",
 
   "status_sync_rproofs": "4/7: Validando\npruebas de rango",
@@ -333,6 +342,7 @@
   "status_setup_headers": "Paso 3/7: Preparando para la validación (historial de kernels)",
   "status_setup_pos": "Paso 3/7: Preparando para la validación (posición de kernels)",
   "status_setup_generic": "Paso 3/7: Preparando el estado de la cadena para la validación",
+  "status_setup_items": "Paso 3/7: Validando sumas de kernels",
 
   "status_rp_progress": "Paso 4/7: Validando estado de la cadena - pruebas de rango: %1",
   "status_kv_progress": "Paso 5/7: Validando estado de la cadena - kernels: %1",

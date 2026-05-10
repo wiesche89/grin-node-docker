@@ -4,6 +4,7 @@
 #include <QQuickStyle>
 #include <QIcon>
 #include <QFontDatabase>
+#include <QUrl>
 
 #include "grinnodemanager.h"
 #include "nodeforeignapi.h"
@@ -43,6 +44,23 @@
 #include "geolookup.h"
 #include "result.h"
 #include "priceanalysis/priceanalysismanager.h"
+
+namespace {
+constexpr auto kUmbrelHomeUrl = "http://umbrel.local";
+constexpr int kDefaultTestnetControllerPort = 13416;
+constexpr int kDefaultMainnetControllerPort = 3416;
+
+QString umbrelControllerUrl(int port)
+{
+    QUrl url(QString::fromLatin1(kUmbrelHomeUrl));
+    url.setPort(port);
+    QString value = url.toString();
+    if (!value.endsWith(QLatin1Char('/'))) {
+        value.append(QLatin1Char('/'));
+    }
+    return value;
+}
+}
 
 /**
  * @brief registerAllMetaTypes
@@ -154,7 +172,7 @@ int main(int argc, char *argv[])
 #else
     // Desktop-Default: lokaler Controller
     if (controllerBase.isEmpty()) {
-        controllerBase = QStringLiteral("http://umbrel.local:3416/");
+        controllerBase = umbrelControllerUrl(kDefaultTestnetControllerPort);
     }
 #endif
 
@@ -188,6 +206,10 @@ int main(int argc, char *argv[])
     Config config;
     engine.rootContext()->setContextProperty("config", &config);
     engine.rootContext()->setContextProperty("controllerBaseUrl", controllerBaseUrl);
+    engine.rootContext()->setContextProperty("defaultUmbrelHomeUrl", QString::fromLatin1(kUmbrelHomeUrl));
+    engine.rootContext()->setContextProperty("defaultTestnetControllerPort", kDefaultTestnetControllerPort);
+    engine.rootContext()->setContextProperty("defaultMainnetControllerUrl",
+                                             umbrelControllerUrl(kDefaultMainnetControllerPort));
 
     engine.load(QUrl(QStringLiteral("qrc:/qml/qml/Main.qml")));
     if (engine.rootObjects().isEmpty()) {

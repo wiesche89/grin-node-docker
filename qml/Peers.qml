@@ -200,6 +200,16 @@ Item {
         }
     }
 
+    function restoreListPosition(y) {
+        Qt.callLater(function() {
+            if (!list)
+                return
+
+            var maxY = Math.max(0, list.contentHeight - list.height)
+            list.contentY = Math.min(Math.max(0, y), maxY)
+        })
+    }
+
     onLoadingChanged: updatePeersStatusText()
     onErrorTextChanged: updatePeersStatusText()
     onFilteredPeersChanged: updatePeersStatusText()
@@ -552,12 +562,14 @@ Item {
     Connections {
         target: nodeOwnerApi
 
-        function onGetPeersFinishedQml(list) {
+        function onGetPeersFinishedQml(peersList) {
+            var y = list.contentY
             loading = false
             errorText = ""
-            updatePeerArray(list)
+            updatePeerArray(peersList)
             rebuildUaOptions()
             applyFilter()
+            restoreListPosition(y)
         }
 
         function onBanPeerFinished(result) {

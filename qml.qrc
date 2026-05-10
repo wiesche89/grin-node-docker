@@ -18,6 +18,7 @@
         <file>qml/Settings.qml</file>
         <file>qml/I18n.qml</file>
         <file>qml/Price.qml</file>
+        <file>qml/NodeConfig.qml</file>
         <file>qml/translation/de.json</file>
         <file>qml/translation/en.json</file>
         <file>qml/translation/fr.json</file>

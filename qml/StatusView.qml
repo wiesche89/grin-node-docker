@@ -170,6 +170,17 @@ Rectangle {
     // Header sync (1/7)
     property var  _hdrCur:  readInfo("current_height")
     property var  _hdrMax:  readInfo("highest_height")
+    property string _hdrSyncType: {
+        var t = readInfo("header_sync_type")
+        if (t === undefined || t === null || String(t).length === 0)
+            return ""
+        t = String(t).toLowerCase()
+        if (t === "pihd")
+            return tr("status_header_sync_pihd", "PIHD")
+        if (t === "legacy")
+            return tr("status_header_sync_legacy", "Legacy")
+        return String(t)
+    }
     property bool _showHeaderSync: {
         if (_syncStatus !== "header_sync")
             return false
@@ -253,6 +264,10 @@ Rectangle {
     property var _setupHeadersTotal:   readInfo("headers_total")
     property var _setupKernelPos:      readInfo("kernel_pos")
     property var _setupKernelPosTotal: readInfo("kernel_pos_total")
+    property var _setupItems:          readInfo("items")
+    property var _setupItemsTotal:     readInfo("items_total")
+    property var _setupGenericCurrent: readInfo("current")
+    property var _setupGenericTotal:   readInfo("total")
 
     property bool _showSetup: _syncStatus === "txhashset_setup"
 
@@ -266,6 +281,30 @@ Rectangle {
         var k  = Number(_setupKernelPos)
         var kt = Number(_setupKernelPosTotal)
         return isFinite(k) && isFinite(kt) && kt > 0 && k >= 0
+    }
+
+    property bool _setupHasItems: {
+        var i  = Number(_setupItems)
+        var it = Number(_setupItemsTotal)
+        return isFinite(i) && isFinite(it) && it > 0 && i >= 0
+    }
+
+    property bool _setupHasGenericProgress: {
+        var c = Number(_setupGenericCurrent)
+        var t = Number(_setupGenericTotal)
+        return isFinite(c) && isFinite(t) && t > 0 && c >= 0
+    }
+
+    property string _setupProgressText: {
+        if (_setupHasHeaders)
+            return "(" + String(_setupHeaders) + " / " + String(_setupHeadersTotal) + ")"
+        if (_setupHasKernelPos)
+            return "(" + String(_setupKernelPos) + " / " + String(_setupKernelPosTotal) + ")"
+        if (_setupHasItems)
+            return "(" + String(_setupItems) + " / " + String(_setupItemsTotal) + ")"
+        if (_setupHasGenericProgress)
+            return "(" + String(_setupGenericCurrent) + " / " + String(_setupGenericTotal) + ")"
+        return ""
     }
 
     // Rangeproofs validation (4/7)
@@ -342,6 +381,9 @@ Rectangle {
             else if (_setupHasKernelPos)
                 return tr("status_sync_setup_pos",
                           "3/7: Preparing for\nvalidation\n(kernel position)")
+            else if (_setupHasItems)
+                return tr("status_sync_setup_items",
+                          "3/7: Validating\nkernel sums")
             else
                 return tr("status_sync_setup_generic",
                           "3/7: Preparing chain\nstate for validation")
@@ -672,6 +714,14 @@ Rectangle {
                                     spacing: 6
 
                                     Label {
+                                        visible: _hdrSyncType.length > 0
+                                        text: _hdrSyncType
+                                        font.pixelSize: dataFontSize
+                                        font.bold: true
+                                        color: "#9fd0ff"
+                                        wrapMode: Text.NoWrap
+                                    }
+                                    Label {
                                         text: _hdrPct
                                         font.pixelSize: dataFontSize
                                         font.bold: true
@@ -833,19 +883,35 @@ Rectangle {
                                 wrapMode: Text.NoWrap
                             }
 
-                            Label {
-                                text: _setupHasHeaders
-                                      ? tr("status_setup_headers",
-                                           "Sync step 3/7: Preparing for validation (kernel history)")
-                                      : (_setupHasKernelPos
-                                         ? tr("status_setup_pos",
-                                              "Sync step 3/7: Preparing for validation (kernel position)")
-                                         : tr("status_setup_generic",
-                                              "Sync step 3/7: Preparing chain state for validation"))
-                                font.pixelSize: dataFontSize
-                                color: "#bbb"
+                            ColumnLayout {
                                 Layout.fillWidth: true
-                                wrapMode: Text.WordWrap
+                                spacing: 2
+
+                                Label {
+                                    text: _setupHasHeaders
+                                          ? tr("status_setup_headers",
+                                               "Sync step 3/7: Preparing for validation (kernel history)")
+                                          : (_setupHasKernelPos
+                                             ? tr("status_setup_pos",
+                                                  "Sync step 3/7: Preparing for validation (kernel position)")
+                                             : (_setupHasItems
+                                                ? tr("status_setup_items",
+                                                     "Sync step 3/7: Validating kernel sums")
+                                                : tr("status_setup_generic",
+                                                     "Sync step 3/7: Preparing chain state for validation")))
+                                    font.pixelSize: dataFontSize
+                                    color: "#bbb"
+                                    Layout.fillWidth: true
+                                    wrapMode: Text.WordWrap
+                                }
+
+                                Label {
+                                    visible: _setupProgressText.length > 0
+                                    text: _setupProgressText
+                                    font.pixelSize: dataFontSize
+                                    color: "#999"
+                                    wrapMode: Text.NoWrap
+                                }
                             }
                         }
 

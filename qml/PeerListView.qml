@@ -67,6 +67,16 @@ Rectangle {
         return tr(labelKey, fallbackLabel) + ": " + value
     }
 
+    function restorePeerListPosition(y) {
+        Qt.callLater(function() {
+            if (!peerList)
+                return
+
+            var maxY = Math.max(0, peerList.contentHeight - peerList.height)
+            peerList.contentY = Math.min(Math.max(0, y), maxY)
+        })
+    }
+
 
 
     // ------------------------------------------------------------------
@@ -373,9 +383,11 @@ Rectangle {
 
         // Emitted by backend with full array of connected peers
         function onConnectedPeersUpdated(peersArray) {
+            var y = peerList.contentY
             root.peersModel = peersArray
             var now = new Date()
             root.lastUpdated = now.toLocaleTimeString(Qt.locale(), "hh:mm:ss")
+            restorePeerListPosition(y)
         }
     }
 
