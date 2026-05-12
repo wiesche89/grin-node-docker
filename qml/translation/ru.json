@@ -208,6 +208,8 @@
     "settings_controller_default":  "По умолчанию (web): %1",
     "settings_controller_active":  "Активный: %1",
     "settings_controller_placeholder":  "Пример: http://localhost:8080/",
+    "settings_controller_username":  "Username",
+    "settings_controller_password":  "Password",
     "settings_controller_save":  "Сохранить",
     "settings_controller_reset":  "Сбросить",
     "settings_controller_info":  "Если пусто — используется значение по умолчанию.",

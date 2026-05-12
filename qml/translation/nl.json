@@ -208,6 +208,8 @@
   "settings_controller_default": "Standaard (web): %1",
   "settings_controller_active": "Actief: %1",
   "settings_controller_placeholder": "Voorbeeld: http://localhost:8080/",
+  "settings_controller_username": "Username",
+  "settings_controller_password": "Password",
   "settings_controller_save": "Opslaan",
   "settings_controller_reset": "Reset",
   "settings_controller_info": "Info: indien leeg, wordt de standaardwaarde gebruikt.",

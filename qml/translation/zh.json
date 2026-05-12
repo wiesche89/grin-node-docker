@@ -208,6 +208,8 @@
     "settings_controller_default":  "默认（网页）：%1",
     "settings_controller_active":  "当前：%1",
     "settings_controller_placeholder":  "示例：http://localhost:8080/",
+    "settings_controller_username":  "Username",
+    "settings_controller_password":  "Password",
     "settings_controller_save":  "保存",
     "settings_controller_reset":  "重置",
     "settings_controller_info":  "提示：若为空，将使用默认值。",

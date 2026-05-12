@@ -230,6 +230,8 @@
   "settings_controller_default": "Predeterminado (web): %1",
   "settings_controller_active": "Activo: %1",
   "settings_controller_placeholder": "Ejemplo: http://localhost:8080/",
+  "settings_controller_username": "Username",
+  "settings_controller_password": "Password",
   "settings_controller_save": "Guardar",
   "settings_controller_reset": "Restablecer",
   "settings_controller_info": "Info: si está vacío, se usará el valor predeterminado.",

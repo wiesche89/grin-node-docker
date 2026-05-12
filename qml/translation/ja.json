@@ -208,6 +208,8 @@
     "settings_controller_default":  "デフォルト (web): %1",
     "settings_controller_active":  "使用中: %1",
     "settings_controller_placeholder":  "例: http://localhost:8080/",
+    "settings_controller_username":  "Username",
+    "settings_controller_password":  "Password",
     "settings_controller_save":  "保存",
     "settings_controller_reset":  "リセット",
     "settings_controller_info":  "情報: 空欄の場合、デフォルトが使用されます。",

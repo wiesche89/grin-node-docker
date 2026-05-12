@@ -78,6 +78,8 @@ ApplicationWindow {
         location: "grin-node-settings.ini"
 
         property string controllerUrlOverride: ""
+        property string controllerUsername: "grin"
+        property string controllerPassword: "yKmdfPOkGawd55c1Yu4J"
         property string languageCode: "en"
         property bool backgroundEnabled: true
         property string transactionHistoryJson: "[]"
@@ -107,6 +109,11 @@ ApplicationWindow {
     }
     property bool controllerApiUrlsReady: false
     property bool controllerApiStartupApplied: false
+    property string controllerApiAuthHeader: {
+        if (!appSettings.controllerUsername || appSettings.controllerUsername.length === 0)
+            return ""
+        return "Basic " + Qt.btoa(appSettings.controllerUsername + ":" + appSettings.controllerPassword)
+    }
 
     function controllerEndpoint(path) {
         var base = controllerApiUrl.toString()
@@ -119,10 +126,14 @@ ApplicationWindow {
 
     function applyControllerApiUrls() {
         controllerApiUrlsReady = false
-        if (typeof nodeOwnerApi !== "undefined" && nodeOwnerApi)
+        if (typeof nodeOwnerApi !== "undefined" && nodeOwnerApi) {
             nodeOwnerApi.apiUrl = controllerEndpoint("v2/owner")
-        if (typeof nodeForeignApi !== "undefined" && nodeForeignApi)
+            nodeOwnerApi.apiKey = controllerApiAuthHeader
+        }
+        if (typeof nodeForeignApi !== "undefined" && nodeForeignApi) {
             nodeForeignApi.apiUrl = controllerEndpoint("v2/foreign")
+            nodeForeignApi.apiKey = controllerApiAuthHeader
+        }
         controllerApiUrlsReady = controllerApiUrl.toString() !== ""
     }
 
@@ -132,6 +143,10 @@ ApplicationWindow {
         } else {
             controllerApiUrlsReady = false
         }
+    }
+    onControllerApiAuthHeaderChanged: {
+        if (controllerApiStartupApplied)
+            applyControllerApiUrls()
     }
     Component.onCompleted: {
         controllerApiUrlsReady = false
@@ -177,8 +192,8 @@ ApplicationWindow {
 
         baseUrl: root.controllerApiUrl
 
-        username: ""
-        password: ""
+        username: appSettings.controllerUsername
+        password: appSettings.controllerPassword
 
     }
 

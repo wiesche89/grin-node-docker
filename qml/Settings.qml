@@ -56,12 +56,20 @@ Item {
     // -----------------------------------------------------------------------
 
     function refreshFromStore() {
-        if (!urlField)
-            return
-        if (settingsStore && typeof settingsStore.controllerUrlOverride === "string")
+        if (urlField && settingsStore && typeof settingsStore.controllerUrlOverride === "string")
             urlField.text = settingsStore.controllerUrlOverride
-        else
+        else if (urlField)
             urlField.text = ""
+
+        if (usernameField && settingsStore && typeof settingsStore.controllerUsername === "string")
+            usernameField.text = settingsStore.controllerUsername
+        else if (usernameField)
+            usernameField.text = "grin"
+
+        if (passwordField && settingsStore && typeof settingsStore.controllerPassword === "string")
+            passwordField.text = settingsStore.controllerPassword
+        else if (passwordField)
+            passwordField.text = "yKmdfPOkGawd55c1Yu4J"
     }
 
     function normalizeUrl(value) {
@@ -79,15 +87,25 @@ Item {
         if (!settingsStore)
             return
         var normalized = normalizeUrl(urlField.text)
+        var username = usernameField.text.trim()
+        var password = passwordField.text
         settingsStore.controllerUrlOverride = normalized
+        settingsStore.controllerUsername = username
+        settingsStore.controllerPassword = password
         urlField.text = normalized
+        usernameField.text = username
+        passwordField.text = password
     }
 
     function resetOverride() {
         if (!settingsStore)
             return
         settingsStore.controllerUrlOverride = ""
+        settingsStore.controllerUsername = "grin"
+        settingsStore.controllerPassword = "yKmdfPOkGawd55c1Yu4J"
         urlField.text = ""
+        usernameField.text = settingsStore.controllerUsername
+        passwordField.text = settingsStore.controllerPassword
     }
 
     // Initialize language selection
@@ -124,6 +142,8 @@ Item {
     Connections {
         target: settingsStore
         function onControllerUrlOverrideChanged() { settingsRoot.refreshFromStore() }
+        function onControllerUsernameChanged() { settingsRoot.refreshFromStore() }
+        function onControllerPasswordChanged() { settingsRoot.refreshFromStore() }
         function onLanguageCodeChanged() { initLanguageFromStore() }
     }
 
@@ -444,6 +464,35 @@ Item {
                             : "Example: http://localhost:8080/"
                     }
 
+                    Label {
+                        text: i18n ? i18n.t("settings_controller_username") : "Username"
+                        color: "#dddddd"
+                        font.pixelSize: 14
+                        font.bold: true
+                        Layout.fillWidth: true
+                    }
+
+                    TextField {
+                        id: usernameField
+                        Layout.fillWidth: true
+                        placeholderText: "grin"
+                    }
+
+                    Label {
+                        text: i18n ? i18n.t("settings_controller_password") : "Password"
+                        color: "#dddddd"
+                        font.pixelSize: 14
+                        font.bold: true
+                        Layout.fillWidth: true
+                    }
+
+                    TextField {
+                        id: passwordField
+                        Layout.fillWidth: true
+                        placeholderText: "yKmdfPOkGawd55c1Yu4J"
+                        echoMode: TextInput.Password
+                    }
+
                     RowLayout {
                         Layout.fillWidth: true
                         spacing: 12
@@ -461,7 +510,9 @@ Item {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 46
                             enabled: settingsStore !== null
-                                     && settingsStore.controllerUrlOverride.length > 0
+                                     && (settingsStore.controllerUrlOverride.length > 0
+                                         || settingsStore.controllerUsername !== "grin"
+                                         || settingsStore.controllerPassword !== "yKmdfPOkGawd55c1Yu4J")
                             onClicked: resetOverride()
                         }
                     }

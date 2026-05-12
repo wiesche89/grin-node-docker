@@ -208,6 +208,8 @@
     "settings_controller_default":  "VarsayÄ±lan (web): %1",
     "settings_controller_active":  "Aktif: %1",
     "settings_controller_placeholder":  "Ãrnek: http://localhost:8080/",
+    "settings_controller_username":  "Username",
+    "settings_controller_password":  "Password",
     "settings_controller_save":  "Kaydet",
     "settings_controller_reset":  "SÄ±fÄ±rla",
     "settings_controller_info":  "Bilgi: BoÅ bÄ±rakÄ±lÄ±rsa varsayÄ±lan kullanÄ±lacaktÄ±r.",

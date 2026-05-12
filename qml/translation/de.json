@@ -216,6 +216,8 @@
   "settings_controller_default": "Standard (Web): %1",
   "settings_controller_active": "Aktiv: %1",
   "settings_controller_placeholder": "Beispiel: http://localhost:8080/",
+  "settings_controller_username": "Benutzername",
+  "settings_controller_password": "Passwort",
   "settings_controller_save": "Speichern",
   "settings_controller_reset": "Zurücksetzen",
   "settings_controller_info": "Info: Wenn leer, wird der Standardwert verwendet.",
