@@ -79,7 +79,7 @@ ApplicationWindow {
 
         property string controllerUrlOverride: ""
         property string controllerUsername: "grin"
-        property string controllerPassword: "yKmdfPOkGawd55c1Yu4J"
+        property string controllerPassword: ""
         property string languageCode: "en"
         property bool backgroundEnabled: true
         property string transactionHistoryJson: "[]"
@@ -499,7 +499,7 @@ ApplicationWindow {
                 }
 
                 // -----------------------------------------------------
-                // Node Config page - Grin++ get_config export
+                // Node configuration
                 // -----------------------------------------------------
                 NodeConfig {
                     Layout.fillWidth: true
@@ -508,6 +508,7 @@ ApplicationWindow {
                     compactLayout: root.compactLayout
                     i18n: i18n
                     pageActive: root.currentIndex === 9
+                    nodeState: homePage.nodeState
                 }
 
                 // -----------------------------------------------------

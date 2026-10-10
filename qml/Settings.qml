@@ -102,7 +102,7 @@ Item {
             return
         settingsStore.controllerUrlOverride = ""
         settingsStore.controllerUsername = "grin"
-        settingsStore.controllerPassword = "yKmdfPOkGawd55c1Yu4J"
+        settingsStore.controllerPassword = ""
         urlField.text = ""
         usernameField.text = settingsStore.controllerUsername
         passwordField.text = settingsStore.controllerPassword

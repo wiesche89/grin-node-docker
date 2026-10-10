@@ -5,6 +5,9 @@
 #include <QIcon>
 #include <QFontDatabase>
 #include <QUrl>
+#ifdef Q_OS_WASM
+#include <emscripten/val.h>
+#endif
 
 #include "grinnodemanager.h"
 #include "nodeforeignapi.h"
@@ -181,6 +184,11 @@ int main(int argc, char *argv[])
     }
 
     QUrl controllerBaseUrl(controllerBase);
+    QString walletBase = controllerBase;
+#ifdef Q_OS_WASM
+    walletBase = QString::fromStdString(emscripten::val::global("location")["origin"].as<std::string>())
+        + QStringLiteral("/wallet");
+#endif
 
     // v2/owner & v2/foreign darauf aufbauen
     const QString ownerUrl = controllerBaseUrl.resolved(QUrl(QStringLiteral("v2/owner"))).toString();
@@ -206,6 +214,7 @@ int main(int argc, char *argv[])
     Config config;
     engine.rootContext()->setContextProperty("config", &config);
     engine.rootContext()->setContextProperty("controllerBaseUrl", controllerBaseUrl);
+    engine.rootContext()->setContextProperty("walletBaseUrl", walletBase);
     engine.rootContext()->setContextProperty("defaultUmbrelHomeUrl", QString::fromLatin1(kUmbrelHomeUrl));
     engine.rootContext()->setContextProperty("defaultTestnetControllerPort", kDefaultTestnetControllerPort);
     engine.rootContext()->setContextProperty("defaultMainnetControllerUrl",

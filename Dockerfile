@@ -26,6 +26,8 @@ COPY media/grin-node/logo.svg ./qtlogo.svg
 
 # 3) Fonts mit einpacken
 COPY fonts ./fonts
+COPY LICENSE ./LICENSE
+COPY licenses ./licenses
 
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh

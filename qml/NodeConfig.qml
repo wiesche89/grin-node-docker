@@ -11,14 +11,26 @@ Item {
     property var i18n: null
     property bool pageActive: false
     property bool loading: false
-    property bool loadedOnce: false
+    property string nodeState: "none"
+    property int revision: 0
+    property int requestRevision: 0
     property string errorText: ""
     property string configText: ""
 
     readonly property var ownerApi: (typeof nodeOwnerApi === "object" ? nodeOwnerApi : null)
 
     onPageActiveChanged: {
-        if (pageActive && !loadedOnce)
+        if (pageActive)
+            refresh()
+    }
+
+    onNodeStateChanged: invalidate()
+
+    function invalidate() {
+        revision++
+        configText = ""
+        errorText = ""
+        if (pageActive)
             refresh()
     }
 
@@ -27,6 +39,9 @@ Item {
     }
 
     function refresh() {
+        if (loading || nodeState !== "grinpp")
+            return
+        requestRevision = revision
         if (!ownerApi || typeof ownerApi.getConfigAsync !== "function") {
             loading = false
             errorText = tr("node_config_err_no_api", "Owner API is not available.")
@@ -41,9 +56,18 @@ Item {
     Connections {
         target: ownerApi
 
+        function onApiUrlChanged() { invalidate() }
+        function onApiKeyChanged() { invalidate() }
+
         function onGetConfigFinished(config, error) {
+            if (!loading)
+                return
             loading = false
-            loadedOnce = true
+            if (requestRevision !== revision) {
+                if (pageActive)
+                    refresh()
+                return
+            }
 
             if (error && error.length > 0) {
                 errorText = error
@@ -74,16 +98,21 @@ Item {
             }
 
             Button {
+                visible: nodeState === "grinpp"
                 text: loading
                     ? tr("node_config_loading", "Loading...")
                     : tr("node_config_refresh", "Refresh")
-                enabled: !loading
+                enabled: !loading && nodeState === "grinpp"
                 onClicked: refresh()
             }
         }
 
         Label {
-            text: tr("node_config_description", "Grin++ get_config export")
+            text: nodeState === "grinpp"
+                ? tr("node_config_description", "Grin++ configuration (read-only).")
+                : nodeState === "rust" || nodeState === "rustStarting"
+                  ? tr("node_config_rust", "Available for Grin++ only.")
+                  : tr("node_config_stopped", "Start Grin++ to view its configuration.")
             color: "#bbbbbb"
             font.pixelSize: 14
             Layout.fillWidth: true
@@ -111,6 +140,7 @@ Item {
         }
 
         Rectangle {
+            visible: nodeState === "grinpp"
             Layout.fillWidth: true
             Layout.fillHeight: true
             radius: 8

@@ -16,22 +16,6 @@ Item {
     // Quiet-Zone in QR-Modulen (üblich: 4)
     property int quietZoneModules: 4
 
-    property bool testnet: {
-        if (typeof config !== "undefined" && config) {
-            var chainType = String(config.value("chain_type", "")).toLowerCase()
-            if (!chainType.length)
-                chainType = String(config.value("server.chain_type", "")).toLowerCase()
-            if (chainType.indexOf("test") !== -1 || chainType.indexOf("floonet") !== -1)
-                return true
-        }
-
-        if (typeof controllerBaseUrl === "object" && controllerBaseUrl && controllerBaseUrl.port
-                && typeof defaultTestnetControllerPort !== "undefined")
-            return controllerBaseUrl.port() === defaultTestnetControllerPort
-
-        return false
-    }
-
     function withoutTrailingSlash(value) {
         var s = (value || "").toString()
         while (s.length > 1 && s.endsWith("/"))
@@ -39,32 +23,11 @@ Item {
         return s
     }
 
-    property string defaultTestnetIpPort: (
-        typeof controllerBaseUrl !== "undefined" && controllerBaseUrl !== null
-    ) ? withoutTrailingSlash(controllerBaseUrl.toString()) : ""
+    property string defaultIpPort: settingsStore && settingsStore.controllerUrlOverride
+        ? withoutTrailingSlash(settingsStore.controllerUrlOverride)
+        : (typeof walletBaseUrl !== "undefined" ? withoutTrailingSlash(walletBaseUrl) : "")
 
-    property string defaultMainnetIpPort: (
-        typeof defaultMainnetControllerUrl !== "undefined" && defaultMainnetControllerUrl
-    ) ? withoutTrailingSlash(defaultMainnetControllerUrl) : defaultTestnetIpPort
-
-    property string controllerOverrideIpPort: (
-        settingsStore && settingsStore.controllerUrlOverride
-        && settingsStore.controllerUrlOverride.length > 0
-    ) ? withoutTrailingSlash(settingsStore.controllerUrlOverride) : ""
-
-    property string defaultIpPort: controllerOverrideIpPort.length > 0
-        ? controllerOverrideIpPort
-        : (testnet ? defaultTestnetIpPort : defaultMainnetIpPort)
-
-    property string defaultSecret: {
-        if (typeof config !== "undefined" && config) {
-            var secret = config.value("owner_api.secret", "")
-            if (secret && secret.length) return secret
-            secret = config.value("owner_api_secret", "")
-            if (secret && secret.length) return secret
-        }
-        return ""
-    }
+    property string defaultSecret: settingsStore ? settingsStore.controllerPassword : ""
 
     property var qrModules: []
     property string qrPayload: ""
@@ -175,7 +138,7 @@ Item {
                     spacing: 16
 
                     Label {
-                        text: i18n ? i18n.t("wallet_ip_port_label") : "Controller host:port"
+                        text: i18n ? i18n.t("wallet_ip_port_label") : "Node URL"
                         color: "#dddddd"
                         font.pixelSize: 14
                         font.bold: true

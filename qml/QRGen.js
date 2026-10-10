@@ -1,3 +1,4 @@
+// Copyright (c) 2009 Kazuhiko Arase. MIT license: licenses/qrcode-generator-MIT.txt
 // qrc:/qml/QRGen.js
 // Minimal QML-friendly wrapper around Kazuhiko Arase QR generator.
 // Exposes a stable namespace for QML: QR.create(...), QR.setUtf8()

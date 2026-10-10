@@ -34,6 +34,16 @@ server {
         proxy_buffering off;
     }
 
+    # Wallet clients authenticate with the app password.
+    location = /wallet/v2/foreign {
+        limit_except POST OPTIONS { deny all; }
+        proxy_pass http://${CONTROLLER_PROXY}/v2/foreign;
+    }
+
+    location /wallet/ {
+        return 404;
+    }
+
     # -----------------------------------------------------------------
     # SPA-Fallback: alles andere auf deine Qt-HTML
     # -----------------------------------------------------------------

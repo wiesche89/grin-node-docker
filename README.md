@@ -1,49 +1,52 @@
 # grin-node-docker
 
-## 📦 Installation
+Qt dashboard for Grin Rust and Grin++, served through nginx. Requires
+[grin-node-controller](https://github.com/wiesche89/grin-node-controller).
 
-### 1 Qt 6.9.2 installieren
-- Qt Online Installer benutzen  
-  **→ Component → Qt 6.9.2 → WebAssembly auswählen**
+## Build
 
----
+Install Qt 6.10.1 for desktop and WebAssembly (`wasm_singlethread`), including
+Qt Charts, and Emscripten 4.0.7. These versions match CI.
 
-### 2️ Python installieren
-- **Python 3.8 oder höher** installieren
-
----
-
-### 3️ EMSDK installieren
 ```bash
+git submodule update --init --recursive
 git clone https://github.com/emscripten-core/emsdk.git
 cd emsdk
-emsdk install 3.1.70
-emsdk activate 3.1.70 --permanent
-emsdk_env```
+./emsdk install 4.0.7
+./emsdk activate 4.0.7
+source ./emsdk_env.sh
+cd ..
+```
 
+Set `QT_WASM_PATH` to your Qt `wasm_singlethread` directory, then build:
 
-### 4 Qt Config
-- WebAssemply Kit
-https://thinkinginqt.com/doc/qtcreator/creator-setup-webassembly.html
-(Important: Qt Creator must be restarted after EMSDK has been installed.)
+```bash
+mkdir -p build/wasm
+cd build/wasm
+"$QT_WASM_PATH/bin/qmake" ../../grin-node-docker.pro -spec wasm-emscripten CONFIG+=release
+make -j4
+cd ../..
+mkdir -p build/wasm-dist
+cp build/wasm/{grin-node-docker.html,grin-node-docker.js,grin-node-docker.wasm,qtloader.js} build/wasm-dist/
+docker build -t grin-ui .
+```
 
-
-### 5 Docker
-Build docker image
-```docker build -t grin-wasm .```
-
-Start docker container
-```docker run --rm -p 8081:80 -p 13413:13413 -p 13414:13414 --name grin-wasm grin-wasm```
-
-Testing
-```docker exec -it grin-wasm sh -lc "T=\`cat \$GRIN_HOME/test/.api_secret 2>/dev/null || echo ''\`; echo '{\"jsonrpc\":\"2.0\",\"method\":\"get_status\",\"params\":[],\"id\":1}' | curl -i -u grin:\$T -H 'Content-Type: application/json' --data @- http://127.0.0.1:13413/v2/owner || true"```
+Set `CONTROLLER_PROXY` to the controller's reachable `host:port` when starting
+the container. The image serves the UI on port 80; it does not run a node.
 
 ## CI
 
-GitHub Actions builds the UI with Qt 6.10.1 and Emscripten 4.0.7, checks nginx,
-then publishes amd64/arm64 images. Main builds use `main` and commit tags;
-a Git tag such as `v0.2.16` publishes image tag `0.2.16`. Pull requests only build
-and test. WASM assets are also available as a workflow artifact.
+GitHub Actions builds and tests the UI, checks nginx, then publishes amd64/arm64
+images. Main builds use `main` and commit tags; a Git tag such as `v0.2.17`
+publishes image tag `0.2.17`. Pull requests only build and test.
+WASM assets are also available as a workflow artifact.
 
-Docker uses `build/wasm-dist` by default. For an existing Qt Creator build, pass
+Docker uses `build/wasm-dist` by default. To use another build directory, pass
 `--build-arg PREBUILT_DIR=build/<kit-directory>`.
+
+## License
+
+Project source: Apache-2.0. Third-party components retain their licenses:
+QRGen.js (Kazuhiko Arase, MIT), Noto fonts (SIL OFL), and Qt.
+Qt Charts uses GPL-3.0 in this build; distributed UI binaries must retain those terms.
+See `licenses/`, `fonts/OFL.txt` and https://doc.qt.io/qt-6/qtcharts-index.html#licenses.
