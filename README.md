@@ -37,3 +37,13 @@ Start docker container
 
 Testing
 ```docker exec -it grin-wasm sh -lc "T=\`cat \$GRIN_HOME/test/.api_secret 2>/dev/null || echo ''\`; echo '{\"jsonrpc\":\"2.0\",\"method\":\"get_status\",\"params\":[],\"id\":1}' | curl -i -u grin:\$T -H 'Content-Type: application/json' --data @- http://127.0.0.1:13413/v2/owner || true"```
+
+## CI
+
+GitHub Actions builds the UI with Qt 6.10.1 and Emscripten 4.0.7, checks nginx,
+then publishes amd64/arm64 images. Main builds use `main` and commit tags;
+a Git tag such as `v0.2.16` publishes image tag `0.2.16`. Pull requests only build
+and test. WASM assets are also available as a workflow artifact.
+
+Docker uses `build/wasm-dist` by default. For an existing Qt Creator build, pass
+`--build-arg PREBUILT_DIR=build/<kit-directory>`.

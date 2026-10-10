@@ -1,42 +1,114 @@
-name: Build & Push Multi-Arch Docker Image (UI)
+name: Build UI
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-
+    runs-on: ubuntu-24.04
     steps:
-      - name: Checkout repository (inkl. Submodules)
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           submodules: recursive
-          fetch-depth: 0
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+      - uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: '4.0.7'
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.10.1'
+          host: linux
+          target: desktop
+          arch: linux_gcc_64
+          modules: qtcharts
+          cache: true
 
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.10.1'
+          host: all_os
+          target: wasm
+          arch: wasm_singlethread
+          modules: qtcharts
+          cache: true
+          set-env: false
+
+      - name: Build WASM
+        run: |
+          mkdir -p build/wasm
+          cd build/wasm
+          "$QT_ROOT_DIR/../wasm_singlethread/bin/qmake" ../../grin-node-docker.pro -spec wasm-emscripten CONFIG+=release
+          make -j"$(nproc)"
+
+      - name: Collect assets
+        run: |
+          mkdir -p build/wasm-dist
+          for file in grin-node-docker.html grin-node-docker.js grin-node-docker.wasm qtloader.js; do
+            test -s "build/wasm/$file"
+            cp "build/wasm/$file" build/wasm-dist/
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wasm-${{ github.sha }}
+          path: build/wasm-dist/
+          if-no-files-found: error
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build test image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: grin-ui:test
+
+      - name: Check nginx
+        run: |
+          docker run -d --name ui-check -e CONTROLLER_PROXY=127.0.0.1:8080 grin-ui:test
+          trap 'docker rm -f ui-check' EXIT
+          for attempt in $(seq 1 15); do
+            if docker exec ui-check wget -q -O /dev/null http://127.0.0.1/grin-node-docker.html; then
+              docker exec ui-check nginx -t
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs ui-check
+          exit 1
+
+      - uses: docker/metadata-action@v5
+        id: tags
+        with:
+          images: wiesche89/grin-node-docker
+          flavor: latest=false
+          tags: |
+            type=raw,value=${{ github.sha }}
+            type=raw,value=main,enable=${{ github.ref == 'refs/heads/main' }}
+            type=semver,pattern={{version}}
+
+      - uses: docker/login-action@v3
+        if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push multi-arch UI image
-        uses: docker/build-push-action@v5
+      - name: Publish image
+        if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+        uses: docker/build-push-action@v6
         with:
           context: .
-          file: ./Dockerfile
-          platforms: linux/amd64,linux/arm64/v8
+          platforms: linux/amd64,linux/arm64
           push: true
-          tags: |
-            wiesche89/grin-node-docker:0.1.0
-            wiesche89/grin-node-docker:${{ github.ref_name }}
-            wiesche89/grin-node-docker:${{ github.sha }}
+          tags: ${{ steps.tags.outputs.tags }}
+          labels: ${{ steps.tags.outputs.labels }}
