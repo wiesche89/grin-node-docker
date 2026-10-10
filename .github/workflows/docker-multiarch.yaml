@@ -3,7 +3,6 @@ name: Build UI
 on:
   push:
     branches: [main]
-    tags: ['v*']
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -11,38 +10,68 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ui-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
+  release:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      qt: ${{ steps.release.outputs.qt }}
+      emscripten: ${{ steps.release.outputs.emscripten }}
+      build: ${{ steps.published.outputs.build }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read release config
+        id: release
+        run: |
+          jq -e '
+            [.version, .qt, .emscripten] |
+            all(.[]; test("^[0-9]+\\.[0-9]+\\.[0-9]+$"))
+          ' releases.json > /dev/null
+          jq -r 'to_entries[] | "\(.key)=\(.value)"' releases.json >> "$GITHUB_OUTPUT"
+      - uses: docker/login-action@v3
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Check published release
+        id: published
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+          PUBLISH: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+        run: |
+          build=true
+          if [[ "$PUBLISH" == true ]]; then
+            image="wiesche89/grin-node-docker:$VERSION"
+            if docker manifest inspect "$image" > /dev/null 2> registry-error.txt; then
+              echo "Skipping published release $image"
+              build=false
+            elif ! grep -Eq 'no such manifest:|manifest unknown' registry-error.txt; then
+              cat registry-error.txt >&2
+              exit 1
+            fi
+          fi
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+
   build:
+    needs: release
+    if: needs.release.outputs.build == 'true'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: Read release config
-        id: release
-        env:
-          RELEASE_TAG: ${{ github.ref_name }}
-          REF_TYPE: ${{ github.ref_type }}
-        run: |
-          jq -e '
-            [.version, .qt, .emscripten] |
-            all(.[]; test("^[0-9]+\\.[0-9]+\\.[0-9]+$"))
-          ' releases.json > /dev/null
-          version=$(jq -r '.version' releases.json)
-          if [[ "$REF_TYPE" == tag && "$RELEASE_TAG" != "v$version" ]]; then
-            echo "Release tag does not match releases.json."
-            exit 1
-          fi
-          jq -r 'to_entries[] | "\(.key)=\(.value)"' releases.json >> "$GITHUB_OUTPUT"
-
       - uses: mymindstorm/setup-emsdk@v14
         with:
-          version: ${{ steps.release.outputs.emscripten }}
+          version: ${{ needs.release.outputs.emscripten }}
 
       - uses: jurplel/install-qt-action@v4
         with:
-          version: ${{ steps.release.outputs.qt }}
+          version: ${{ needs.release.outputs.qt }}
           host: linux
           target: desktop
           arch: linux_gcc_64
@@ -51,7 +80,7 @@ jobs:
 
       - uses: jurplel/install-qt-action@v4
         with:
-          version: ${{ steps.release.outputs.qt }}
+          version: ${{ needs.release.outputs.qt }}
           host: all_os
           target: wasm
           arch: wasm_singlethread
@@ -115,16 +144,16 @@ jobs:
           tags: |
             type=raw,value=${{ github.sha }}
             type=raw,value=main,enable=${{ github.ref == 'refs/heads/main' }}
-            type=raw,value=${{ steps.release.outputs.version }},enable=${{ github.ref_type == 'tag' }}
+            type=raw,value=${{ needs.release.outputs.version }},enable=${{ github.ref == 'refs/heads/main' }}
 
       - uses: docker/login-action@v3
-        if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Publish image
-        if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         uses: docker/build-push-action@v6
         with:
           context: .

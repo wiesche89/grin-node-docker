@@ -37,11 +37,13 @@ the container. The image serves the UI on port 80; it does not run a node.
 
 ## CI
 
-GitHub Actions builds and tests the UI, checks nginx, then publishes amd64/arm64
-images. `releases.json` defines the UI and toolchain versions. Release tags must
-match `v<version>` from that file. Main builds use `main` and commit tags;
-pull requests only build and test.
-WASM assets are also available as a workflow artifact.
+`releases.json` defines the UI and toolchain versions.
+Push to `main` to build new releases. Published versions are skipped.
+Bump the UI version to release changes.
+
+CI tests the UI and nginx before publishing amd64 and arm64 images.
+New releases also update `main` and the commit tag.
+Pull requests only build and test. WASM files are available as a workflow artifact.
 
 Docker uses `build/wasm-dist` by default. To use another build directory, pass
 `--build-arg PREBUILT_DIR=build/<kit-directory>`.
