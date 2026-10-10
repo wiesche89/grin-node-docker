@@ -24,10 +24,10 @@ Item {
     }
 
     property string defaultIpPort: settingsStore && settingsStore.controllerUrlOverride
-        ? withoutTrailingSlash(settingsStore.controllerUrlOverride)
+        ? withoutTrailingSlash(settingsStore.controllerUrlOverride) + "/wallet"
         : (typeof walletBaseUrl !== "undefined" ? withoutTrailingSlash(walletBaseUrl) : "")
 
-    property string defaultSecret: settingsStore ? settingsStore.controllerPassword : ""
+    property string defaultSecret: ""
 
     property var qrModules: []
     property string qrPayload: ""

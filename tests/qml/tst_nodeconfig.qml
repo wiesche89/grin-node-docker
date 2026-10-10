@@ -16,9 +16,13 @@ TestCase {
     App.Wallet { id: wallet; width: 640; height: 480; settingsStore: settings }
     function test_wallet() {
         compare(wallet.defaultIpPort, walletBaseUrl)
-        compare(JSON.parse(wallet.walletJson()).secret, settings.controllerPassword)
+        compare(JSON.parse(wallet.walletJson()).secret, "")
         settings.controllerPassword = "updated-review-password"
-        compare(JSON.parse(wallet.walletJson()).secret, settings.controllerPassword)
+        compare(JSON.parse(wallet.walletJson()).secret, "")
+        wallet.defaultSecret = "node-foreign-key"
+        compare(JSON.parse(wallet.walletJson()).secret, "node-foreign-key")
+        wallet.defaultSecret = ""
+        compare(JSON.parse(wallet.walletJson()).secret, "")
     }
     App.NodeConfig { id: page; width: 640; height: 480 }
     function test_states() {

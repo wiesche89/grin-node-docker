@@ -69,7 +69,7 @@ Item {
         if (passwordField && settingsStore && typeof settingsStore.controllerPassword === "string")
             passwordField.text = settingsStore.controllerPassword
         else if (passwordField)
-            passwordField.text = "yKmdfPOkGawd55c1Yu4J"
+            passwordField.text = ""
     }
 
     function normalizeUrl(value) {
@@ -489,7 +489,7 @@ Item {
                     TextField {
                         id: passwordField
                         Layout.fillWidth: true
-                        placeholderText: "yKmdfPOkGawd55c1Yu4J"
+                        placeholderText: ""
                         echoMode: TextInput.Password
                     }
 
@@ -512,7 +512,7 @@ Item {
                             enabled: settingsStore !== null
                                      && (settingsStore.controllerUrlOverride.length > 0
                                          || settingsStore.controllerUsername !== "grin"
-                                         || settingsStore.controllerPassword !== "yKmdfPOkGawd55c1Yu4J")
+                                         || settingsStore.controllerPassword !== "")
                             onClicked: resetOverride()
                         }
                     }

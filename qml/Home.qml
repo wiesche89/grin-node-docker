@@ -26,6 +26,7 @@ Item {
     property bool apiUrlsReady: false
 
     // Node manager from C++ (GrinNodeManager)
+    property string walletApiKey: ""
     property var nodeManager: null
     property var mgr: nodeManager   // short alias used internally
 
@@ -277,6 +278,8 @@ Item {
         } else if (grinppRunning) {
             newState = "grinpp"
         }
+
+        homeRoot.walletApiKey = rustRunning ? (rustInfo.foreignApiKey || "") : ""
 
         var previousState = homeRoot.nodeState
         if (newState === "none" && homeRoot.directNodeApiReachable)

@@ -486,7 +486,7 @@ ApplicationWindow {
                 }
 
                 // -----------------------------------------------------
-                // Wallet page - share controller credentials
+                // Wallet connection
                 // -----------------------------------------------------
                 Wallet {
                     Layout.fillWidth: true
@@ -495,6 +495,7 @@ ApplicationWindow {
                     compactLayout: root.compactLayout
                     settingsStore: appSettings
                     nodeManager: grinMgr
+                    defaultSecret: homePage.walletApiKey
                     i18n: i18n
                 }
 

@@ -185,6 +185,8 @@ int main(int argc, char *argv[])
 
     QUrl controllerBaseUrl(controllerBase);
     QString walletBase = controllerBase;
+    while (walletBase.endsWith(QLatin1Char('/'))) walletBase.chop(1);
+    walletBase += QStringLiteral("/wallet");
 #ifdef Q_OS_WASM
     walletBase = QString::fromStdString(emscripten::val::global("location")["origin"].as<std::string>())
         + QStringLiteral("/wallet");
