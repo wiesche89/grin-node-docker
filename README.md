@@ -5,15 +5,16 @@ Qt dashboard for Grin Rust and Grin++, served through nginx. Requires
 
 ## Build
 
-Install Qt 6.10.1 for desktop and WebAssembly (`wasm_singlethread`), including
-Qt Charts, and Emscripten 4.0.7. These versions match CI.
+Install Qt for desktop and WebAssembly (`wasm_singlethread`), including Qt Charts.
+Use the Qt and Emscripten versions in `releases.json`, as CI does.
 
 ```bash
 git submodule update --init --recursive
+EMSDK_VERSION=$(python3 -c 'import json; print(json.load(open("releases.json"))["emscripten"])')
 git clone https://github.com/emscripten-core/emsdk.git
 cd emsdk
-./emsdk install 4.0.7
-./emsdk activate 4.0.7
+./emsdk install "$EMSDK_VERSION"
+./emsdk activate "$EMSDK_VERSION"
 source ./emsdk_env.sh
 cd ..
 ```
@@ -37,8 +38,9 @@ the container. The image serves the UI on port 80; it does not run a node.
 ## CI
 
 GitHub Actions builds and tests the UI, checks nginx, then publishes amd64/arm64
-images. Main builds use `main` and commit tags; a Git tag such as `v0.2.17`
-publishes image tag `0.2.17`. Pull requests only build and test.
+images. `releases.json` defines the UI and toolchain versions. Release tags must
+match `v<version>` from that file. Main builds use `main` and commit tags;
+pull requests only build and test.
 WASM assets are also available as a workflow artifact.
 
 Docker uses `build/wasm-dist` by default. To use another build directory, pass

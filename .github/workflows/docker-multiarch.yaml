@@ -19,13 +19,30 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Read release config
+        id: release
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
+        run: |
+          jq -e '
+            [.version, .qt, .emscripten] |
+            all(.[]; test("^[0-9]+\\.[0-9]+\\.[0-9]+$"))
+          ' releases.json > /dev/null
+          version=$(jq -r '.version' releases.json)
+          if [[ "$REF_TYPE" == tag && "$RELEASE_TAG" != "v$version" ]]; then
+            echo "Release tag does not match releases.json."
+            exit 1
+          fi
+          jq -r 'to_entries[] | "\(.key)=\(.value)"' releases.json >> "$GITHUB_OUTPUT"
+
       - uses: mymindstorm/setup-emsdk@v14
         with:
-          version: '4.0.7'
+          version: ${{ steps.release.outputs.emscripten }}
 
       - uses: jurplel/install-qt-action@v4
         with:
-          version: '6.10.1'
+          version: ${{ steps.release.outputs.qt }}
           host: linux
           target: desktop
           arch: linux_gcc_64
@@ -34,7 +51,7 @@ jobs:
 
       - uses: jurplel/install-qt-action@v4
         with:
-          version: '6.10.1'
+          version: ${{ steps.release.outputs.qt }}
           host: all_os
           target: wasm
           arch: wasm_singlethread
@@ -98,7 +115,7 @@ jobs:
           tags: |
             type=raw,value=${{ github.sha }}
             type=raw,value=main,enable=${{ github.ref == 'refs/heads/main' }}
-            type=semver,pattern={{version}}
+            type=raw,value=${{ steps.release.outputs.version }},enable=${{ github.ref_type == 'tag' }}
 
       - uses: docker/login-action@v3
         if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
