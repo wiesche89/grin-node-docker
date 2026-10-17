@@ -52,7 +52,8 @@ try:
             p = directory / 'bin' / name
             p.write_text('#!/bin/sh\n' + text + '\n')
             p.chmod(0o755)
-        script('getent', 'printf "%s trusted-proxy\\n" "$TEST_PROXY_IP"')
+        script('getent', '[ "$1" = ahostsv4 ] || exit 1\nprintf "%s STREAM trusted-proxy\\n" "$TEST_PROXY_IP"')
+        script('ip', '[ "$*" = "-4 route show default" ] || exit 1\nprintf "default via %s dev eth0\\n" "$TEST_PROXY_IP"')
         script('sleep', 'exit 0')  # Only used by the entrypoint's DNS retry loop.
         script('nginx', 'exec "$TEST_NGINX" -p "$TEST_DIR/" -c "$TEST_DIR/nginx.conf" "$@"')
         (directory / 'bin/envsubst').symlink_to(Path(envsubst).resolve())
@@ -72,7 +73,7 @@ try:
         (directory / 'entrypoint.sh').write_text(entrypoint)
         env = dict(os.environ, PATH=str(directory / 'bin') + ':' + os.environ['PATH'],
                    CONTROLLER_PROXY=f'127.0.0.1:{upstream.server_port}',
-                   CONTROLLER_PASSWORD=secret, TRUSTED_PROXY_HOST='trusted-proxy',
+                   CONTROLLER_PASSWORD=secret, TRUSTED_PROXY_HOST='trusted-proxy', TRUSTED_PROXY_MODE='container',
                    TEST_PROXY_IP='127.0.0.1', TEST_DIR=str(directory), TEST_NGINX=nginx)
         def request(path, auth=None, extra=None, method='GET'):
             headers = dict(extra or {})
@@ -86,13 +87,18 @@ try:
             finally:
                 conn.close()
         for override in ({'CONTROLLER_PASSWORD': ''}, {'TRUSTED_PROXY_HOST': ''},
-                         {'TRUSTED_PROXY_HOST': 'bad;host'}, {'TEST_PROXY_IP': 'not-an-ip'}):
+                         {'TRUSTED_PROXY_HOST': 'bad;host'}, {'TEST_PROXY_IP': 'not-an-ip'},
+                         {'TRUSTED_PROXY_MODE': 'invalid'},
+                         {'TRUSTED_PROXY_MODE': 'host', 'TEST_PROXY_IP': ''},
+                         {'TRUSTED_PROXY_MODE': 'host', 'TEST_PROXY_IP': '999.0.0.1'}):
             result = subprocess.run(['sh', str(directory / 'entrypoint.sh')], env=dict(env, **override),
                                     capture_output=True, timeout=5)
             assert result.returncode != 0, override
             assert secret.encode() not in result.stderr
-        for trusted in (False, True):
-            run_env = dict(env, TEST_PROXY_IP='127.0.0.1' if trusted else '127.0.0.2')
+        for mode, trusted in (('container', False), ('container', True), ('host', False), ('host', True)):
+            run_env = dict(env, TRUSTED_PROXY_MODE=mode,
+                           TRUSTED_PROXY_HOST='trusted-proxy' if mode == 'container' else '',
+                           TEST_PROXY_IP='127.0.0.1' if trusted else '127.0.0.2')
             process = subprocess.Popen(['sh', str(directory / 'entrypoint.sh')], env=run_env,
                                        stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
             try:

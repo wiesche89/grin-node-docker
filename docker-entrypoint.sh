@@ -9,14 +9,24 @@ TRUSTED_PROXY_DIRECTIVES=""
 # Restrict access before injecting controller credentials.
 if [ "${CONTROLLER_PASSWORD+x}" = x ]; then
     : "${CONTROLLER_PASSWORD:?Controller password must not be empty}"
-    : "${TRUSTED_PROXY_HOST:?A trusted app-proxy hostname is required}"
-    case "$TRUSTED_PROXY_HOST" in
-        *[!a-zA-Z0-9_.-]*|'') echo 'Invalid trusted proxy hostname' >&2; exit 1 ;;
+    case "${TRUSTED_PROXY_MODE:-container}" in
+        container)
+            : "${TRUSTED_PROXY_HOST:?A trusted app-proxy hostname is required}"
+            case "$TRUSTED_PROXY_HOST" in
+                *[!a-zA-Z0-9_.-]*|'') echo 'Invalid trusted proxy hostname' >&2; exit 1 ;;
+            esac
+            ;;
+        host) ;;
+        *) echo 'Invalid trusted proxy mode' >&2; exit 1 ;;
     esac
     proxy_ip=""
     attempt=0
     while [ "$attempt" -lt 30 ]; do
-        proxy_ip=$(getent hosts "$TRUSTED_PROXY_HOST" | awk '$1 ~ /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/ {print $1; exit}') || true
+        if [ "${TRUSTED_PROXY_MODE:-container}" = host ]; then
+            proxy_ip=$(ip -4 route show default | awk '$1 == "default" && $2 == "via" {print $3; exit}') || true
+        else
+            proxy_ip=$(getent ahostsv4 "$TRUSTED_PROXY_HOST" | awk '$1 ~ /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/ {print $1; exit}') || true
+        fi
         [ -n "$proxy_ip" ] && break
         attempt=$((attempt + 1))
         sleep 1

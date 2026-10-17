@@ -6,7 +6,7 @@ ARG PREBUILT_DIR
 
 WORKDIR /usr/share/nginx/html
 
-RUN apk add --no-cache gettext musl-utils
+RUN apk add --no-cache gettext musl-utils iproute2
 
 ENV CONTROLLER_PROXY=controller:8080
 

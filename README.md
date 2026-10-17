@@ -51,7 +51,9 @@ Docker uses `build/wasm-dist` by default. To use another build directory, pass
 ## Umbrel authentication
 
 Pass the same `CONTROLLER_PASSWORD` to UI and controller; start the controller
-with `--require-auth`. Set `TRUSTED_PROXY_HOST` to `<app-id>_app_proxy_1`.
+with `--require-auth`. On Umbrel 2.0, set `TRUSTED_PROXY_MODE=host` to trust
+the container's default IPv4 gateway. For older Umbrel versions, use
+`TRUSTED_PROXY_MODE=container` and `TRUSTED_PROXY_HOST=<app-id>_app_proxy_1`.
 Umbrel derives the secret in `exports.sh`; users only need their Umbrel login.
 
 nginx allows the resolved proxy IP and adds credentials to `/api/` requests.

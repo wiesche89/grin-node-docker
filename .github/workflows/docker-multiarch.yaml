@@ -136,6 +136,22 @@ jobs:
           docker logs ui-check
           exit 1
 
+      - name: Check Umbrel host gateway
+        run: |
+          docker network create ui-gateway-check
+          trap 'docker rm -f ui-gateway-check; docker network rm ui-gateway-check' EXIT
+          docker run -d --name ui-gateway-check --network ui-gateway-check \
+            -e CONTROLLER_PROXY=127.0.0.1:8080 \
+            -e CONTROLLER_PASSWORD=ci-test-secret \
+            -e TRUSTED_PROXY_MODE=host grin-ui:test
+          address=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' ui-gateway-check)
+          curl --noproxy '*' --fail --retry 15 --retry-connrefused --retry-delay 1 \
+            --max-time 5 "http://$address/grin-node-docker.html" -o /dev/null
+          docker exec ui-gateway-check nginx -t
+          result=$(docker run --rm --network ui-gateway-check --entrypoint wget \
+            grin-ui:test -S -O /dev/null http://ui-gateway-check/grin-node-docker.html 2>&1 || true)
+          printf '%s\n' "$result" | grep -q '403 Forbidden'
+
       - uses: docker/metadata-action@v5
         id: tags
         with:
