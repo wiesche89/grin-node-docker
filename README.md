@@ -48,6 +48,24 @@ Pull requests only build and test. WASM files are available as a workflow artifa
 Docker uses `build/wasm-dist` by default. To use another build directory, pass
 `--build-arg PREBUILT_DIR=build/<kit-directory>`.
 
+## Umbrel authentication
+
+Pass the same `CONTROLLER_PASSWORD` to UI and controller; start the controller
+with `--require-auth`. Set `TRUSTED_PROXY_HOST` to `<app-id>_app_proxy_1`.
+Umbrel derives the secret in `exports.sh`; users only need their Umbrel login.
+
+nginx allows the resolved proxy IP and adds credentials to `/api/` requests.
+`/wallet/v2/foreign` retains the wallet's node credentials. This requires the
+updated controller. Missing credentials or proxy resolution stop startup.
+Restart the app if the proxy IP changes. Without `CONTROLLER_PASSWORD`, standalone
+behavior is unchanged. The generated nginx config is mode 0600.
+
+Test with Python 3, nginx and gettext:
+
+```sh
+python3 tests/proxy_auth.py /path/to/nginx /path/to/envsubst
+```
+
 ## License
 
 Project source: Apache-2.0. Third-party components retain their licenses:
