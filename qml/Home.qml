@@ -282,9 +282,6 @@ Item {
         homeRoot.walletApiKey = rustRunning ? (rustInfo.foreignApiKey || "") : ""
 
         var previousState = homeRoot.nodeState
-        if (newState === "none" && homeRoot.directNodeApiReachable)
-            newState = "external"
-
         if (previousState !== newState) {
             homeRoot.nodeState = newState
 
@@ -315,8 +312,12 @@ Item {
         homeRoot.nodeUptimeSeconds = uptimeSeconds
 
         var nodeIsRunning = rustRunning || grinppRunning
-        if (nodeIsRunning)
+        if (nodeIsRunning) {
             startStatusAndPeersPolling()
+        } else {
+            directNodeApiReachable = false
+            stopStatusAndPeersPolling()
+        }
 
         controllerReachable = true
         controllerError = false
@@ -340,6 +341,8 @@ Item {
     }
 
     function applyDirectNodeApiStatus(statusObj) {
+        if (controllerReachable && !isRustRunning() && !isGrinppRunning())
+            return
         var normalized = toPlainObject(statusObj)
         if (!normalized)
             return
@@ -683,6 +686,8 @@ Item {
         }
 
         function onNodeStopped(kind) {
+            homeRoot.directNodeApiReachable = false
+            homeRoot.walletApiKey = ""
             homeRoot.nodeState = "none"
             stopStatusAndPeersPolling()
             homeRoot.requestInFlight = false

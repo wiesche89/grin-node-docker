@@ -89,7 +89,7 @@ jobs:
           set-env: false
 
       - name: Check QML
-        run: QT_QPA_PLATFORM=offscreen "$QT_ROOT_DIR/bin/qmltestrunner" -input tests/qml
+        run: QT_QPA_PLATFORM=offscreen "$QT_ROOT_DIR/bin/qmltestrunner" -import tests/qml -input tests/qml
 
       - name: Build WASM
         run: |
