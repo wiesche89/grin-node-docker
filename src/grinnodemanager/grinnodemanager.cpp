@@ -98,8 +98,11 @@ void GrinNodeManager::deleteGrinppChain()
 // ---------- Public API ----------
 void GrinNodeManager::getStatus()
 {
+    if (m_statusPending)
+        return;
+    m_statusPending = true;
     QNetworkRequest req = makeRequest("status");
-    m_net->get(req);
+    watchReply(m_net->get(req));
 }
 
 // Polling
@@ -127,13 +130,13 @@ void GrinNodeManager::start(NodeKind kind, const QStringList &args)
         json["args"] = QJsonArray::fromStringList(args);
     }
 
-    m_net->post(req, QJsonDocument(json).toJson());
+    watchReply(m_net->post(req, QJsonDocument(json).toJson()));
 }
 
 void GrinNodeManager::stop(NodeKind kind)
 {
     QNetworkRequest req = makeRequest("stop/" + kindToPath(kind));
-    m_net->post(req, QByteArray());
+    watchReply(m_net->post(req, QByteArray()));
 }
 
 void GrinNodeManager::restart(NodeKind kind, const QStringList &args)
@@ -146,7 +149,7 @@ void GrinNodeManager::restart(NodeKind kind, const QStringList &args)
         json["args"] = QJsonArray::fromStringList(args);
     }
 
-    m_net->post(req, QJsonDocument(json).toJson());
+    watchReply(m_net->post(req, QJsonDocument(json).toJson()));
 }
 
 void GrinNodeManager::getLogs(NodeKind kind, int n)
@@ -155,7 +158,7 @@ void GrinNodeManager::getLogs(NodeKind kind, int n)
     QNetworkRequest req = makeRequest(QString("logs/%1?n=%2")
                                           .arg(kindToPath(kind))
                                           .arg(n));
-    m_net->get(req);
+    watchReply(m_net->get(req));
 }
 
 // NEU: /delete/<kind>
@@ -164,7 +167,7 @@ void GrinNodeManager::deleteChain(NodeKind kind)
     QNetworkRequest req = makeRequest("delete/" + kindToPath(kind));
 
     // analog zu start/stop/restart als POST
-    m_net->post(req, QByteArray());
+    watchReply(m_net->post(req, QByteArray()));
 }
 
 // ---------- Utils ----------
@@ -239,6 +242,14 @@ void GrinNodeManager::setBaseUrl(const QUrl &u)
     emit baseUrlChanged();
 }
 
+void GrinNodeManager::watchReply(QNetworkReply *reply)
+{
+    QTimer::singleShot(qMax(1000, m_opts.timeoutMs), reply, [reply] {
+        if (!reply->isFinished())
+            reply->abort();
+    });
+}
+
 // ---------- Reply dispatch ----------
 void GrinNodeManager::onReplyFinished(QNetworkReply *reply)
 {
@@ -253,6 +264,9 @@ void GrinNodeManager::onReplyFinished(QNetworkReply *reply)
         apiPath = reply->url().path();
     }
 
+    if (apiPath == "status")
+        m_statusPending = false;
+
     const QByteArray payload = reply->readAll();
 
     auto finish = [&] {
@@ -263,7 +277,7 @@ void GrinNodeManager::onReplyFinished(QNetworkReply *reply)
         }
     };
 
-    if (statusCode != 200) {
+    if (statusCode != 200 || reply->error() != QNetworkReply::NoError) {
         emit errorOccurred(QString("[%1] %2")
                                .arg(reply->url().toString(), reply->errorString()));
         finish();
@@ -272,18 +286,18 @@ void GrinNodeManager::onReplyFinished(QNetworkReply *reply)
     }
 
     // Routing nur noch über apiPath
-    if (apiPath.contains("status")) {
+    if (apiPath == "status") {
         const auto doc = QJsonDocument::fromJson(payload);
         emit statusReceived(doc.object());
-    } else if (apiPath.contains("logs/")) {
+    } else if (apiPath.startsWith("logs/")) {
         emit logsReceived(QString::fromUtf8(payload));
-    } else if (apiPath.contains("start/")) {
+    } else if (apiPath.startsWith("start/")) {
         emit nodeStarted(apiPath.contains("rust") ? NodeKind::Rust : NodeKind::GrinPP);
-    } else if (apiPath.contains("stop/")) {
+    } else if (apiPath.startsWith("stop/")) {
         emit nodeStopped(apiPath.contains("rust") ? NodeKind::Rust : NodeKind::GrinPP);
-    } else if (apiPath.contains("restart/")) {
+    } else if (apiPath.startsWith("restart/")) {
         emit nodeRestarted(apiPath.contains("rust") ? NodeKind::Rust : NodeKind::GrinPP);
-    } else if (apiPath.contains("delete/")) {
+    } else if (apiPath.startsWith("delete/")) {
         emit chainDeleted(apiPath.contains("rust") ? NodeKind::Rust : NodeKind::GrinPP);
     }
 

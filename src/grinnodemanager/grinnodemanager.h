@@ -105,6 +105,7 @@ private slots:
 private:
     // Hilfsinit, von beiden Ctors aufgerufen
     void initNetwork();
+    void watchReply(QNetworkReply *reply);
 
     void start(NodeKind kind, const QStringList &args);
     void stop(NodeKind kind);
@@ -121,6 +122,7 @@ private:
     Options m_opts;
     QNetworkAccessManager *m_net{nullptr};
     QTimer m_statusTimer;
+    bool m_statusPending{false};
     QString m_lastResponse;
 };
 

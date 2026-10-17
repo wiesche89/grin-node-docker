@@ -62,4 +62,28 @@ TestCase {
         manager.statusReceived({nodes: {rust: {running: false}, grinpp: {running: false}}})
         compare(page.nodeState, "none")
     }
+
+    function test_stop_error_after_node_reply() {
+        manager.statusReceived({nodes: {rust: {running: true}}})
+        nodeOwnerApi.statusUpdated({height: 123})
+        for (var attempt = 0; attempt < 2; ++attempt) {
+            page.requestInFlight = true
+            manager.errorOccurred("Request timed out")
+            verify(!page.requestInFlight)
+            verify(page.controllerError)
+            verify(!page.controllerActionsAvailable)
+        }
+        manager.statusReceived({nodes: {rust: {running: false}}})
+        verify(page.controllerActionsAvailable)
+        compare(page.nodeState, "none")
+    }
+
+    function test_unrelated_reply_during_stop() {
+        manager.statusReceived({nodes: {rust: {running: true}}})
+        page.requestInFlight = true
+        manager.lastResponse = "unrelated log response"
+        verify(page.requestInFlight)
+        manager.nodeStopped(GrinNodeManager.Rust)
+        verify(!page.requestInFlight)
+    }
 }

@@ -698,8 +698,6 @@ Item {
         }
 
         function onErrorOccurred(msg) {
-            if (homeRoot.directNodeApiReachable)
-                return
             homeRoot.controllerReachable = false
             controllerErrorMessage = msg
             controllerError = true
@@ -710,7 +708,6 @@ Item {
         }
 
         function onLastResponseChanged() {
-            homeRoot.requestInFlight = false
             if (!mgr || !mgr.lastResponse || mgr.lastResponse === "")
                 return
 
