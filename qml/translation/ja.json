@@ -1,4 +1,6 @@
 ﻿{
+  "home_node_initializing": "ノードを起動しています…",
+  "home_node_initializing_detail": "ローカルのブロックチェーンデータを初期化しています。しばらくお待ちください。",
     "nav_home":  "ホーム",
     "nav_map":  "マップ",
     "nav_peers":  "ピア",

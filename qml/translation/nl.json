@@ -1,4 +1,6 @@
 {
+  "home_node_initializing": "Node wordt gestart…",
+  "home_node_initializing_detail": "De lokale blockchaingegevens worden geïnitialiseerd. Dit kan even duren.",
   "nav_home": "Home",
   "nav_map": "Kaart",
   "nav_peers": "Peers",

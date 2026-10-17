@@ -1,4 +1,6 @@
 ﻿{
+  "home_node_initializing": "Düğüm başlatılıyor…",
+  "home_node_initializing_detail": "Yerel blok zinciri verileri başlatılıyor. Bu işlem biraz zaman alabilir.",
     "nav_home":  "Ana Sayfa",
     "nav_map":  "Harita",
     "nav_peers":  "EÅler",

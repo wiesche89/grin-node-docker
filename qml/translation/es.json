@@ -1,4 +1,6 @@
 {
+  "home_node_initializing": "El nodo se está iniciando…",
+  "home_node_initializing_detail": "Inicializando los datos locales de la cadena de bloques. Esto puede tardar un poco.",
   "nav_home": "Inicio",
   "nav_map": "Mapa",
   "nav_peers": "Pares",

@@ -1,4 +1,6 @@
 ﻿{
+  "home_node_initializing": "Узел запускается…",
+  "home_node_initializing_detail": "Инициализация локальных данных блокчейна. Это может занять некоторое время.",
     "nav_home":  "Главная",
     "nav_map":  "Карта",
     "nav_peers":  "Пиры",

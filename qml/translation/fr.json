@@ -1,4 +1,6 @@
 ﻿{
+  "home_node_initializing": "Démarrage du nœud…",
+  "home_node_initializing_detail": "Initialisation des données locales de la blockchain. Cela peut prendre un moment.",
     "nav_home":  "Accueil",
     "nav_map":  "Carte",
     "nav_peers":  "Pairs",

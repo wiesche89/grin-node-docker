@@ -25,6 +25,30 @@ TestCase {
     }
     App.Home { id: page; width: 900; height: 700; nodeManager: manager }
 
+    function test_initializing() {
+        manager.statusReceived({nodes: {rust: {running: false}}})
+        manager.nodeStarted(GrinNodeManager.Rust)
+        verify(page.nodeInitializing)
+        verify(!page.requestInFlight)
+        verify(page.controllerActionsAvailable)
+        manager.statusReceived({nodes: {rust: {running: true}}})
+        verify(page.nodeInitializing)
+        nodeOwnerApi.statusUpdated({height: 123})
+        verify(!page.nodeInitializing)
+        manager.nodeRestarted(GrinNodeManager.Rust)
+        verify(page.nodeInitializing)
+        manager.nodeStopped(GrinNodeManager.Rust)
+        verify(!page.nodeInitializing)
+    }
+
+    function test_initializing_on_reload() {
+        manager.statusReceived({nodes: {rust: {running: false}}})
+        manager.statusReceived({nodes: {rust: {running: true}}})
+        verify(page.nodeInitializing)
+        manager.statusReceived({nodes: {rust: {running: false}}})
+        verify(!page.nodeInitializing)
+    }
+
     function test_stop_data() {
         return [{tag: "rust", kind: GrinNodeManager.Rust, id: "rust"},
                 {tag: "grinpp", kind: GrinNodeManager.GrinPP, id: "grinpp"}]

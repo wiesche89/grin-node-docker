@@ -1,4 +1,6 @@
 ﻿{
+  "home_node_initializing": "节点正在启动…",
+  "home_node_initializing_detail": "正在初始化本地区块链数据，可能需要一些时间。",
     "nav_home":  "首页",
     "nav_map":  "地图",
     "nav_peers":  "节点",

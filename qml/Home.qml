@@ -85,6 +85,8 @@ Item {
     property string currentNodeKind: "none"   // "none" | "rust" | "grinpp"
     property string nodeState: "none"        // "none" | "rustStarting" | "grinppStarting" | "rust" | "grinpp" | "external"
     property bool directNodeApiReachable: false
+    readonly property bool nodeInitializing: controllerReachable
+        && (isRustRunning() || isGrinppRunning()) && !directNodeApiReachable
 
     // Derived: node is running if either Rust or Grin++ is active
     property bool nodeRunning: isRustRunning() || isGrinppRunning() || isExternalNodeRunning()
@@ -283,6 +285,7 @@ Item {
 
         var previousState = homeRoot.nodeState
         if (previousState !== newState) {
+            homeRoot.directNodeApiReachable = false
             homeRoot.nodeState = newState
 
             // Wenn sich der State ändert während requestInFlight==true,
@@ -644,6 +647,51 @@ Item {
         }
     }
 
+    Popup {
+        objectName: "nodeStartupPopup"
+        parent: homeRoot
+        x: Math.max(12, homeRoot.width - width - 16)
+        y: Math.max(12, homeRoot.height - height - 16)
+        width: Math.min(380, homeRoot.width - 24)
+        padding: 16
+        modal: false
+        focus: false
+        closePolicy: Popup.NoAutoClose
+        visible: homeRoot.visible && homeRoot.nodeInitializing && !homeRoot.requestInFlight
+
+        background: Rectangle {
+            color: "#252525"
+            border.color: "#666666"
+            radius: 8
+        }
+        contentItem: RowLayout {
+            spacing: 12
+            BusyIndicator {
+                Layout.preferredWidth: 32
+                Layout.preferredHeight: 32
+                palette.text: "#cccccc"
+                running: homeRoot.nodeInitializing
+            }
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 6
+                Label {
+                    Layout.fillWidth: true
+                    text: tr("home_node_initializing", "Node is starting…")
+                    color: "#eeeeee"
+                    font.bold: true
+                    wrapMode: Text.WordWrap
+                }
+                Label {
+                    Layout.fillWidth: true
+                    text: tr("home_node_initializing_detail", "Initializing local blockchain data. This may take a while.")
+                    color: "#cccccc"
+                    wrapMode: Text.WordWrap
+                }
+            }
+        }
+    }
+
     // -----------------------------------------------------------------
     // Global loading overlay while any node action is in flight
     // -----------------------------------------------------------------
@@ -668,6 +716,7 @@ Item {
         target: mgr
 
         function onNodeStarted(kind) {
+            homeRoot.directNodeApiReachable = false
             homeRoot.nodeState =
                     (kind === GrinNodeManager.Rust) ? "rust" : "grinpp"
             startStatusAndPeersPolling()
@@ -677,6 +726,7 @@ Item {
         }
 
         function onNodeRestarted(kind) {
+            homeRoot.directNodeApiReachable = false
             homeRoot.nodeState =
                     (kind === GrinNodeManager.Rust) ? "rust" : "grinpp"
             startStatusAndPeersPolling()
