@@ -99,13 +99,11 @@ signals:
 
     void chainDeleted(GrinNodeManager::NodeKind kind);
 
-private slots:
-    void onReplyFinished(QNetworkReply *reply);
-
 private:
+    void onReplyFinished(QNetworkReply *reply, const QString &apiPath);
     // Hilfsinit, von beiden Ctors aufgerufen
     void initNetwork();
-    void watchReply(QNetworkReply *reply);
+    void watchReply(QNetworkReply *reply, const QString &apiPath);
 
     void start(NodeKind kind, const QStringList &args);
     void stop(NodeKind kind);

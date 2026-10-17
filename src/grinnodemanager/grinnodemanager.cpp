@@ -18,8 +18,6 @@ void GrinNodeManager::initNetwork()
     if (!m_net) {
         m_net = new QNetworkAccessManager(this);
     }
-    connect(m_net, &QNetworkAccessManager::finished,
-            this, &GrinNodeManager::onReplyFinished);
 
     m_statusTimer.setSingleShot(false);
     connect(&m_statusTimer, &QTimer::timeout, this, &GrinNodeManager::getStatus);
@@ -102,7 +100,7 @@ void GrinNodeManager::getStatus()
         return;
     m_statusPending = true;
     QNetworkRequest req = makeRequest("status");
-    watchReply(m_net->get(req));
+    watchReply(m_net->get(req), "status");
 }
 
 // Polling
@@ -122,7 +120,8 @@ void GrinNodeManager::stopStatusPolling()
 // ---------- Core helpers ----------
 void GrinNodeManager::start(NodeKind kind, const QStringList &args)
 {
-    QNetworkRequest req = makeRequest("start/" + kindToPath(kind));
+    const QString path = "start/" + kindToPath(kind);
+    QNetworkRequest req = makeRequest(path);
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
 
     QJsonObject json;
@@ -130,18 +129,20 @@ void GrinNodeManager::start(NodeKind kind, const QStringList &args)
         json["args"] = QJsonArray::fromStringList(args);
     }
 
-    watchReply(m_net->post(req, QJsonDocument(json).toJson()));
+    watchReply(m_net->post(req, QJsonDocument(json).toJson()), path);
 }
 
 void GrinNodeManager::stop(NodeKind kind)
 {
-    QNetworkRequest req = makeRequest("stop/" + kindToPath(kind));
-    watchReply(m_net->post(req, QByteArray()));
+    const QString path = "stop/" + kindToPath(kind);
+    QNetworkRequest req = makeRequest(path);
+    watchReply(m_net->post(req, QByteArray()), path);
 }
 
 void GrinNodeManager::restart(NodeKind kind, const QStringList &args)
 {
-    QNetworkRequest req = makeRequest("restart/" + kindToPath(kind));
+    const QString path = "restart/" + kindToPath(kind);
+    QNetworkRequest req = makeRequest(path);
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
 
     QJsonObject json;
@@ -149,7 +150,7 @@ void GrinNodeManager::restart(NodeKind kind, const QStringList &args)
         json["args"] = QJsonArray::fromStringList(args);
     }
 
-    watchReply(m_net->post(req, QJsonDocument(json).toJson()));
+    watchReply(m_net->post(req, QJsonDocument(json).toJson()), path);
 }
 
 void GrinNodeManager::getLogs(NodeKind kind, int n)
@@ -158,16 +159,17 @@ void GrinNodeManager::getLogs(NodeKind kind, int n)
     QNetworkRequest req = makeRequest(QString("logs/%1?n=%2")
                                           .arg(kindToPath(kind))
                                           .arg(n));
-    watchReply(m_net->get(req));
+    watchReply(m_net->get(req), "logs/" + kindToPath(kind));
 }
 
 // NEU: /delete/<kind>
 void GrinNodeManager::deleteChain(NodeKind kind)
 {
-    QNetworkRequest req = makeRequest("delete/" + kindToPath(kind));
+    const QString path = "delete/" + kindToPath(kind);
+    QNetworkRequest req = makeRequest(path);
 
     // analog zu start/stop/restart als POST
-    watchReply(m_net->post(req, QByteArray()));
+    watchReply(m_net->post(req, QByteArray()), path);
 }
 
 // ---------- Utils ----------
@@ -176,9 +178,6 @@ void GrinNodeManager::deleteChain(NodeKind kind)
 // eine echte URL zu bauen (ohne den Basis-Pfad zu überschreiben)
 QNetworkRequest GrinNodeManager::makeRequest(const QString &path) const
 {
-    // <-- Speichere den ORIGINAL-Pfad, unverändert
-    QString apiPath = path;
-
     QString rel = path;
     if (rel.startsWith('/'))
         rel.remove(0, 1);
@@ -194,9 +193,6 @@ QNetworkRequest GrinNodeManager::makeRequest(const QString &path) const
     QUrl url = base.resolved(relUrl);
 
     QNetworkRequest req(url);
-
-    // EXAKT diesen relativen Pfad speichern – das ist unser Routing-Key
-    req.setAttribute(QNetworkRequest::User, apiPath);
 
     req.setRawHeader("User-Agent", m_opts.userAgent);
     if (!m_opts.username.isEmpty())
@@ -242,8 +238,12 @@ void GrinNodeManager::setBaseUrl(const QUrl &u)
     emit baseUrlChanged();
 }
 
-void GrinNodeManager::watchReply(QNetworkReply *reply)
+void GrinNodeManager::watchReply(QNetworkReply *reply, const QString &apiPath)
 {
+    // Qt WASM replies do not retain the original request.
+    connect(reply, &QNetworkReply::finished, this, [this, reply, apiPath] {
+        onReplyFinished(reply, apiPath);
+    });
     QTimer::singleShot(qMax(1000, m_opts.timeoutMs), reply, [reply] {
         if (!reply->isFinished())
             reply->abort();
@@ -251,18 +251,9 @@ void GrinNodeManager::watchReply(QNetworkReply *reply)
 }
 
 // ---------- Reply dispatch ----------
-void GrinNodeManager::onReplyFinished(QNetworkReply *reply)
+void GrinNodeManager::onReplyFinished(QNetworkReply *reply, const QString &apiPath)
 {
     int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-
-    // Unser eigener „API-Pfad“
-    QString apiPath = reply->request().attribute(QNetworkRequest::User).toString();
-
-
-    // Fallback (nur für Debug), falls aus irgendeinem Grund leer:
-    if (apiPath.isEmpty()) {
-        apiPath = reply->url().path();
-    }
 
     if (apiPath == "status")
         m_statusPending = false;
